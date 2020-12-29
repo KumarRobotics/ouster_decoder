@@ -4,6 +4,8 @@
 
 namespace ouster_decoder {
 
+namespace sensor = ouster_ros::sensor;
+
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   // Call service to retrieve sensor info, this must be done first
   ouster_ros::OSConfigSrv cfg{};
@@ -14,6 +16,7 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   }
 
   ROS_INFO("Parsing OSConfig");
+  info_ = sensor::parse_metadata(cfg.response.metadata);
 }
 
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {}

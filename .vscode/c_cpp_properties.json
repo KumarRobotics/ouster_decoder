@@ -5,7 +5,11 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/opt/ros/noetic/include",
-                "/home/chao/Workspace/ws/ouster_ws/devel/include"
+                "/usr/include/pcl-1.10",
+                "/usr/include/eigen3",
+                "/home/chao/Workspace/ws/ouster_ws/devel/include",
+                "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_ros/include",
+                "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_client/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++"
