@@ -16,14 +16,18 @@ find_package(
              diagnostic_updater
              ouster_ros)
 
-catkin_package()
+catkin_package(INCLUDE_DIRS include)
 
-add_executable(${PROJECT_NAME} src/os_decoder.cpp)
-target_include_directories(${PROJECT_NAME} PRIVATE ${catkin_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${catkin_LIBRARIES})
+add_library(${PROJECT_NAME} src/decoder.cpp)
+target_include_directories(${PROJECT_NAME} PUBLIC ${catkin_INCLUDE_DIRS}
+                                                  include src)
+target_link_libraries(${PROJECT_NAME} PUBLIC ${catkin_LIBRARIES})
+
+add_executable(${PROJECT_NAME}_node src/decoder_node.cpp)
+target_link_libraries(${PROJECT_NAME}_node PRIVATE ${PROJECT_NAME})
 
 install(
-  TARGETS ${PROJECT_NAME}
+  TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
