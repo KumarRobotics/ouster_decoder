@@ -14,11 +14,13 @@ find_package(
              diagnostic_updater
              ouster_ros)
 
-catkin_package(INCLUDE_DIRS include)
+catkin_package()
 
 include(CompilerWarnings)
-add_library(${PROJECT_NANE}_warnings INTERFACE)
+add_library(${PROJECT_NAME}_warnings INTERFACE)
 set_project_warnings(${PROJECT_NAME}_warnings)
 
-include_directories(src)
-add_subdirectory(src)
+add_executable(${PROJECT_NAME} src/decoder.cpp)
+target_include_directories(${PROJECT_NAME} PUBLIC src ${catkin_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${catkin_LIBRARIES}
+                                             ${PROJECT_NAME}_warnings)

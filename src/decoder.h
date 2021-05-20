@@ -33,7 +33,7 @@ class Decoder {
   image_transport::ImageTransport it_;
   ros::Publisher cloud_pub_, imu_pub_;
   image_transport::CameraPublisher camera_pub_;
-  ros::Subscriber lidar_packet_sub_, imu_packet_sub_;
+  ros::Subscriber lidar_sub_, imu_sub_;
   tf2_ros::StaticTransformBroadcaster static_broadcaster_;
 
   // ouster
