@@ -1,10 +1,8 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
 project(ouster_decoder)
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-add_compile_options(-Wall)
+set(CMAKE_CXX_STANDARD 17)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 find_package(
   catkin REQUIRED
@@ -18,16 +16,9 @@ find_package(
 
 catkin_package(INCLUDE_DIRS include)
 
-add_library(${PROJECT_NAME} src/decoder.cpp)
-target_include_directories(${PROJECT_NAME} PUBLIC ${catkin_INCLUDE_DIRS}
-                                                  include src)
-target_link_libraries(${PROJECT_NAME} PUBLIC ${catkin_LIBRARIES})
+include(CompilerWarnings)
+add_library(${PROJECT_NANE}_warnings INTERFACE)
+set_project_warnings(${PROJECT_NAME}_warnings)
 
-add_executable(${PROJECT_NAME}_node src/decoder_node.cpp)
-target_link_libraries(${PROJECT_NAME}_node PRIVATE ${PROJECT_NAME})
-
-install(
-  TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+include_directories(src)
+add_subdirectory(src)
