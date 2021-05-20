@@ -5,6 +5,7 @@
 
 ~/Workspace/ws/ouster_ws/devel/include
 ~/Workspace/repo/versatran01/ouster_example/ouster_client/include
+~/Workspace/repo/versatran01/ouster_example/ouster_client/include/optional-lite
 ~/Workspace/repo/versatran01/ouster_example/ouster_ros/include
 
 src

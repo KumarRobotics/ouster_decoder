@@ -4,7 +4,7 @@
 
 namespace ouster_decoder {
 
-namespace sensor = ouster_ros::sensor;
+namespace os = ouster_ros::sensor;
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   // Call service to retrieve sensor info, this must be done first
@@ -16,21 +16,23 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   }
 
   ROS_INFO("Parsing OSConfig");
-  info_ = sensor::parse_metadata(cfg.response.metadata);
+  info_ = os::parse_metadata(cfg.response.metadata);
+  ROS_DEBUG_STREAM("Metadata: " << os::to_string(info_));
+  ROS_INFO_STREAM("Lidar mode: " << os::to_string(info_.mode));
 
   lidar_sub_ =
       pnh_.subscribe("lidar_packets", 2048, &Decoder::LidarPacketCb, this);
-  imu_sub_ = pnh_.subscribe("imu_packets", 2048, &Decoder::ImuPacketCb, this);
-  ROS_INFO("Subscribing to: %s", lidar_sub_.getTopic().c_str());
-  ROS_INFO("Subscribing to: %s", imu_sub_.getTopic().c_str());
+  imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
+  ROS_INFO("Subscribing lidar from: %s", lidar_sub_.getTopic().c_str());
+  ROS_INFO("Subscribing imu from: %s", imu_sub_.getTopic().c_str());
 }
 
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
-  ROS_INFO("Lidar packet");
+  //  ROS_INFO("Lidar packet");
 }
 
 void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
-  ROS_INFO("Imu packet");
+  //  ROS_INFO("Imu packet");
 }
 
 }  // namespace ouster_decoder

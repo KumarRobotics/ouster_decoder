@@ -1,6 +1,7 @@
 <launch>
 
-    <arg name="driver" default="os_node"/>
+    <arg name="debug" default="false"/>
+    <env if="$(arg debug)" name="ROSCONSOLE_CONFIG_FILE" value="$(find ouster_decoder)/launch/debug.conf"/>
 
     <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder" output="screen">
         <remap from="~os_config" to="/os_node/os_config"/>
