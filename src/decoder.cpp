@@ -30,6 +30,22 @@ void TransformDeg2RadInPlace(std::vector<double>& vec) {
 
 namespace os = ouster_ros::sensor;
 
+// Decoder
+// Calls os_config service to get sensor info.
+// Subscribes to lidar and imu packets and publishes image, camera info, point
+// cloud, imu and static transforms
+//
+// Image:
+// Decoded lidar packets are stored in a cv::Mat and published as
+// sensor_msgs::Image. The image is a 3-channel float image. The channels are
+// [range, azimuth, intensity]. The image is stored in staggered form, meaning
+// pixels in each column will have the same timestamp
+//
+// CameraInfo:
+// Auxillary information is stored in sensor_msgs::CameraInfo.
+// D stores beam_altitude_angles
+// The time between two columns is in K[0].
+// The angle between two columns is in R[0].
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   // Call service to retrieve sensor info, this must be done first
   ouster_ros::OSConfigSrv cfg{};
@@ -57,8 +73,10 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   camera_pub_ = it_.advertiseCamera("image", 10);
 
   // Frames
+  sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
   lidar_frame_ = pnh_.param<std::string>("lidar_frame", "os_lidar");
   imu_frame_ = pnh_.param<std::string>("imu_frame", "os_imu");
+  ROS_INFO_STREAM("Sensor frame: " << sensor_frame_);
   ROS_INFO_STREAM("Lidar frame: " << lidar_frame_);
   ROS_INFO_STREAM("Imu frame: " << imu_frame_);
 
@@ -84,6 +102,15 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   TransformDeg2RadInPlace(info_.beam_azimuth_angles);
 
   Allocate(rows, cols);
+  SendTransform();
+}
+
+void Decoder::SendTransform() {
+  static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
+      info_.imu_to_sensor_transform, sensor_frame_, imu_frame_));
+
+  static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
+      info_.lidar_to_sensor_transform, sensor_frame_, lidar_frame_));
 }
 
 void Decoder::Allocate(int rows, int cols) {
@@ -136,7 +163,7 @@ void Decoder::Timing(const ros::Time& start) const {
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - start).toSec();
   const auto ratio = t_proc / dt_packet_;
-  if (ratio > 1.5) {
+  if (ratio > 1.2) {
     ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
              t_proc * 1e3,
              dt_packet_ * 1e3,
@@ -156,33 +183,32 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     //    const uint32_t encoder = pf.col_encoder(col_buf);  // not necessary
     const uint32_t status = pf.col_status(col_buf);
     const bool valid = (status == 0xffffffff);
-    // TODO (chao): handle invalid case
 
-    // Compute azimuth angle theta0
+    // Compute azimuth angle theta0, this should always be valid
     const auto theta0 = kTau - meas_id * d_azimuth_;
-    timestamps_[curr_col_] = t_ns;
-    azimuths_[curr_col_] = theta0;
+    timestamps_.at(curr_col_) = t_ns;
+    azimuths_.at(curr_col_) = theta0;
 
-    // TODO (chao): clean this up
     for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
       const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
 
-      const float range = pf.px_range(px_buf) * kMmToM * valid;
-      const float theta = theta0 - info_.beam_azimuth_angles[ipx];
-      const float signal = pf.px_signal(px_buf);
+      const auto range = pf.px_range(px_buf) * kMmToM;
+      const auto theta = theta0 - info_.beam_azimuth_angles[ipx];
+      const auto signal = pf.px_signal(px_buf);  // u16
 
-      // Image
+      // Image (range, azimuth, intensity), ignore ambient and reflectivity
       auto& v = image_.at<cv::Vec3f>(ipx, curr_col_);
-      v[0] = range;   // range or 0
-      v[1] = theta;   // azimuth
-      v[2] = signal;  // intensity
+      v[0] = range * valid;  // range or 0
+      v[1] = theta;          // azimuth
+      v[2] = signal;         // intensity
 
-      // Cloud
+      // Cloud (see software manual figure 3.1)
       const auto n = info_.lidar_origin_to_beam_origin_mm * kMmToM;
-      const auto phi = info_.beam_altitude_angles[ipx];
-      const float d = range - n;
+      const auto d = range - n;
+      const auto phi = info_.beam_altitude_angles[ipx];  // from high to low
       const auto cos_phi = std::cos(phi);
 
+      // TODO (chao): handle invalid case for point
       auto& p = cloud_.at(curr_col_, ipx);  // (col, row)
       p.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
       p.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);

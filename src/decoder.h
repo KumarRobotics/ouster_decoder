@@ -19,17 +19,17 @@ class Decoder {
 
   explicit Decoder(const ros::NodeHandle& pnh);
 
-  // Non-copyable
+  // No copy no move
   Decoder(const Decoder&) = delete;
-  Decoder operator=(const Decoder&) = delete;
+  Decoder& operator=(const Decoder&) = delete;
+  Decoder(Decoder&&) = delete;
+  Decoder& operator=(Decoder&&) = delete;
 
   /// Callbacks
   void LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg);
   void ImuPacketCb(const ouster_ros::PacketMsg& imu_msg);
 
  private:
-  void Timing(const ros::Time& start) const;
-
   /// Decode lidar packet
   void DecodeLidar(const uint8_t* const packet_buf);
 
@@ -45,15 +45,21 @@ class Decoder {
   /// Publish messages
   void Publish();
 
+  /// Send static transforms
+  void SendTransform();
+
+  /// Record processing time of lidar callback, print warning if it exceeds time
+  /// between two packets
+  void Timing(const ros::Time& start) const;
+
   // ros
   ros::NodeHandle pnh_;
   image_transport::ImageTransport it_;
   ros::Subscriber lidar_sub_, imu_sub_;
   ros::Publisher cloud_pub_, imu_pub_;
   image_transport::CameraPublisher camera_pub_;
-  image_transport::Publisher dbg_range_pub_, dbg_intensity_pub_;
-  tf2_ros::StaticTransformBroadcaster static_broadcaster_;
-  std::string lidar_frame_, imu_frame_;
+  tf2_ros::StaticTransformBroadcaster static_tf_;
+  std::string sensor_frame_, lidar_frame_, imu_frame_;
 
   // ouster
   ouster_ros::sensor::sensor_info info_;
