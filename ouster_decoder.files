@@ -8,3 +8,5 @@ launch/driver.launch
 package.xml
 src/decoder.cpp
 src/decoder.h
+.clang-format
+.clang-tidy

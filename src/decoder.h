@@ -31,7 +31,10 @@ class Decoder {
   void Timing(const ros::Time& start) const;
 
   /// Decode lidar packet
-  void DecodeLidar(const uint8_t* const packet_puf);
+  void DecodeLidar(const uint8_t* const packet_buf);
+
+  /// Decode imu packet
+  auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
 
   /// Whether we have had enough data for a full scan (to publish)
   bool HaveFullScan() const noexcept { return curr_col_ >= image_.cols; }
@@ -59,12 +62,13 @@ class Decoder {
   // data
   cv::Mat image_;
   CloudT cloud_;
-  int curr_col_{0};               // current column
-  double dt_col_{};               // time between two columns
-  double dt_packet_{};            // time between two packets
-  double d_azimuth_{};            // delta azimuth radian
-  std::vector<uint64_t> ts_;      // all time stamps (nanosecond)
-  std::vector<double> azimuths_;  // all azimuth angles (radian)
+  int curr_col_{0};                   // current column
+  double dt_col_{};                   // time between two columns
+  double dt_packet_{};                // time between two packets
+  double d_azimuth_{};                // delta azimuth radian
+  double gravity_{};                  // gravity
+  std::vector<uint64_t> timestamps_;  // all time stamps (nanosecond)
+  std::vector<double> azimuths_;      // all azimuth angles (radian)
 };
 
 }  // namespace ouster_decoder
