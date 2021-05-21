@@ -2,6 +2,7 @@ CMakeLists.txt
 README.md
 cmake/Cache.cmake
 cmake/CompilerWarnings.cmake
+include/ouster_decoder/model.h
 launch/debug.conf
 launch/decoder.launch
 launch/driver.launch
@@ -10,3 +11,9 @@ src/decoder.cpp
 src/decoder.h
 .clang-format
 .clang-tidy
+src/decoder.cpp
+src/decoder.h
+src/model.cpp
+src/model_test.cpp
+src/utils.h
+src/utils_test.cpp

@@ -12,7 +12,7 @@
     <arg name="lidar_frame" default="os_lidar"/>
     <arg name="imu_frame" default="os_imu"/>
 
-    <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder" output="screen" ns="$(arg lidar_ns)">
+    <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder_node" output="screen" ns="$(arg lidar_ns)">
         <!-- params -->
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="lidar_frame" type="string" value="$(arg lidar_frame)"/>

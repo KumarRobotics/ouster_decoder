@@ -9,3 +9,5 @@
 ~/Workspace/repo/versatran01/ouster_example/ouster_ros/include
 
 src
+include
+include/ouster_decoder

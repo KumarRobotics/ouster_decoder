@@ -7,6 +7,7 @@
 
 #include <opencv2/core/mat.hpp>
 
+#include "ouster_decoder/model.h"
 #include "ouster_ros/PacketMsg.h"
 #include "ouster_ros/ros.h"
 
@@ -48,6 +49,9 @@ class Decoder {
   /// Send static transforms
   void SendTransform();
 
+  /// Reset cached data
+  void Reset();
+
   /// Record processing time of lidar callback, print warning if it exceeds time
   /// between two packets
   void Timing(const ros::Time& start) const;
@@ -57,6 +61,7 @@ class Decoder {
   image_transport::ImageTransport it_;
   ros::Subscriber lidar_sub_, imu_sub_;
   ros::Publisher cloud_pub_, imu_pub_;
+  ros::Publisher range_pub_;
   image_transport::CameraPublisher camera_pub_;
   tf2_ros::StaticTransformBroadcaster static_tf_;
   std::string sensor_frame_, lidar_frame_, imu_frame_;
@@ -68,13 +73,15 @@ class Decoder {
   // data
   cv::Mat image_;
   CloudT cloud_;
+  bool destagger_{};                  // destagger image
   int curr_col_{0};                   // current column
-  double dt_col_{};                   // time between two columns
   double dt_packet_{};                // time between two packets
-  double d_azimuth_{};                // delta azimuth radian
   double gravity_{};                  // gravity
-  std::vector<uint64_t> timestamps_;  // all time stamps (nanosecond)
   std::vector<double> azimuths_;      // all azimuth angles (radian)
+  std::vector<uint64_t> timestamps_;  // all time stamps (nanosecond)
+
+  LidarModel model_;
+  sensor_msgs::CameraInfoPtr cinfo_msg_;
 };
 
 }  // namespace ouster_decoder
