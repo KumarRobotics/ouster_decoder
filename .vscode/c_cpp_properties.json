@@ -6,10 +6,11 @@
                 "${workspaceFolder}/**",
                 "/opt/ros/noetic/include",
                 "/usr/include/pcl-1.10",
-                "/usr/include/eigen3",
+                "/usr/local/include/eigen3",
                 "/home/chao/Workspace/ws/ouster_ws/devel/include",
                 "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_ros/include",
-                "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_client/include"
+                "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_client/include",
+                "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_client/include/optional-lite"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++"
