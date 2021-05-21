@@ -70,6 +70,7 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   ROS_INFO("columns per packet: %d", pf_->columns_per_packet);
   ROS_INFO("pixels per column: %d", pf_->pixels_per_column);
 
+  // Data
   dt_col_ = 1.0 / freq / cols;
   dt_packet_ = dt_col_ * pf_->columns_per_packet;  // time two packet
   d_azimuth_ = kTau / cols;                        // angle between two columns
@@ -78,17 +79,61 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   TransformDeg2RadInPlace(info_.beam_altitude_angles);
   TransformDeg2RadInPlace(info_.beam_azimuth_angles);
 
-  // Allocate
+  Allocate(rows, cols);
+}
+
+void Decoder::Allocate(int rows, int cols) {
   image_.create(rows, cols, CV_32FC3);
-  cloud_ = CloudT(cols, rows);
+  cloud_ = CloudT(cols, rows);  // point cloud ctor takes width and height
   ts_.resize(cols);
   azimuths_.resize(cols);
 }
 
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
-  const auto t_beg = ros::Time::now();
+  const auto start = ros::Time::now();
+  DecodeLidar(lidar_msg.buf.data());
 
-  uint8_t const* const packet_buf = lidar_msg.buf.data();
+  // We have data for the entire range image
+  if (HaveFullScan()) {
+    curr_col_ = 0;
+    Publish();
+  }
+
+  Timing(start);
+}
+
+void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
+  //  ROS_INFO("Imu packet");
+}
+
+void Decoder::Publish() {
+  std_msgs::Header header;
+  header.frame_id = lidar_frame_;
+  header.stamp.fromNSec(ts_.front());
+
+  // Publish
+  auto image_msg = cv_bridge::CvImage(header, "32FC3", image_).toImageMsg();
+  auto cinfo_msg = boost::make_shared<sensor_msgs::CameraInfo>();
+  camera_pub_.publish(image_msg, cinfo_msg);
+
+  // Publish cloud
+  pcl_conversions::toPCL(header, cloud_.header);
+  cloud_pub_.publish(cloud_);
+}
+
+void Decoder::Timing(const ros::Time& start) const {
+  const auto t_end = ros::Time::now();
+  const auto t_proc = (t_end - start).toSec();
+  const auto ratio = t_proc / dt_packet_;
+  if (ratio > 1) {
+    ROS_WARN("Proc time: %f us, meas time: %f us, ratio: %f",
+             t_proc * 1e6,
+             dt_packet_ * 1e6,
+             ratio);
+  }
+}
+
+void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
   const auto& pf = *pf_;
 
   for (int icol = 0; icol < pf.columns_per_packet; ++icol, ++curr_col_) {
@@ -132,38 +177,6 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
       p.intensity = signal;
     }
   }
-
-  // We have data for the entire range image
-  if (curr_col_ >= image_.cols) {
-    curr_col_ = 0;
-
-    std_msgs::Header header;
-    header.frame_id = lidar_frame_;
-    header.stamp.fromNSec(ts_.front());
-
-    // Publish
-    auto image_msg = cv_bridge::CvImage(header, "32FC3", image_).toImageMsg();
-    auto cinfo_msg = boost::make_shared<sensor_msgs::CameraInfo>();
-    camera_pub_.publish(image_msg, cinfo_msg);
-
-    // Publish cloud
-    pcl_conversions::toPCL(header, cloud_.header);
-    cloud_pub_.publish(cloud_);
-  }
-
-  const auto t_end = ros::Time::now();
-  const auto t_proc = (t_end - t_beg).toSec();
-  const auto ratio = t_proc / dt_packet_;
-  if (ratio > 1) {
-    ROS_WARN("Proc time: %f us, meas time: %f us, ratio: %f",
-             t_proc * 1e6,
-             dt_packet_ * 1e6,
-             ratio);
-  }
-}
-
-void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
-  //  ROS_INFO("Imu packet");
 }
 
 }  // namespace ouster_decoder

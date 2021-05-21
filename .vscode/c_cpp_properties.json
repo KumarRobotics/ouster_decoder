@@ -3,7 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
+                "${workspaceFolder}/src",
                 "/opt/ros/noetic/include",
                 "/usr/include/pcl-1.10",
                 "/usr/local/include/eigen3",
