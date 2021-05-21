@@ -173,7 +173,7 @@ void Decoder::Timing(const ros::Time& start) const {
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - start).toSec();
   const auto ratio = t_proc / dt_packet_;
-  if (ratio > 1.2) {
+  if (ratio > 1.5) {
     ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
              t_proc * 1e3,
              dt_packet_ * 1e3,
