@@ -24,7 +24,8 @@ struct LidarModel {
   double d_azimuth;
   double beam_offset;
   std::vector<double> azimuths;
-  std::vector<double> altitudes;  
+  std::vector<double> altitudes;
+  std::vector<int> pixel_offset;
 
   void ToPoint(const LidarData& data);
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo);

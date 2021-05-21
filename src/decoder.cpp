@@ -34,12 +34,6 @@ namespace os = ouster_ros::sensor;
 // Calls os_config service to get sensor info.
 // Subscribes to lidar and imu packets and publishes image, camera info, point
 // cloud, imu and static transforms
-//
-// CameraInfo:
-// Auxillary information is stored in sensor_msgs::CameraInfo.
-// D stores beam_altitude_angles
-// The time between two columns is in K[0].
-// The angle between two columns is in R[0].
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   // Call service to retrieve sensor info, this must be done first
   ouster_ros::OSConfigSrv cfg{};
@@ -91,6 +85,7 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   model_.beam_offset = info_.lidar_origin_to_beam_origin_mm * kMmToM;
   model_.altitudes = info_.beam_altitude_angles;
   model_.azimuths = info_.beam_azimuth_angles;
+  model_.pixel_offset = info_.format.pixel_shift_by_row;
   TransformDeg2RadInPlace(model_.altitudes);
   TransformDeg2RadInPlace(model_.azimuths);
 
@@ -163,9 +158,11 @@ void Decoder::Publish() {
   camera_pub_.publish(image_msg, cinfo_msg_);
 
   // Publish range image to test destagger
-  cv::Mat range;
-  cv::extractChannel(image_, range, 0);
-  range_pub_.publish(cv_bridge::CvImage(header, "32FC1", range).toImageMsg());
+  if (range_pub_.getNumSubscribers() > 0) {
+    cv::Mat range;
+    cv::extractChannel(image_, range, 0);
+    range_pub_.publish(cv_bridge::CvImage(header, "32FC1", range).toImageMsg());
+  }
 
   // Publish cloud
   pcl_conversions::toPCL(header, cloud_.header);
@@ -181,6 +178,12 @@ void Decoder::Timing(const ros::Time& start) const {
              t_proc * 1e3,
              dt_packet_ * 1e3,
              ratio);
+  }
+  if (curr_col_ == 0) {
+    ROS_DEBUG("Proc time: %f ms, meas time: %f ms, ratio: %f",
+              t_proc * 1e3,
+              dt_packet_ * 1e3,
+              ratio);
   }
 }
 
@@ -206,11 +209,15 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
       const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
 
+      const int col = destagger_
+                          ? (curr_col_ + model_.pixel_offset[ipx]) % image_.cols
+                          : curr_col_;
+
       const float range = pf.px_range(px_buf) * kMmToM;
       const float theta = theta0 - model_.azimuths[ipx];
       const auto signal = pf.px_signal(px_buf);  // u16
 
-      auto& px = image_.at<LidarData>(ipx, curr_col_);
+      auto& px = image_.at<LidarData>(ipx, col);
       px.range = range * valid;                      // 32
       px.theta = theta;                              // 32
       px.col = curr_col_;                            // 16
@@ -225,14 +232,14 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       const auto cos_phi = std::cos(phi);
 
       // TODO (chao): handle invalid case for point
-      auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
+      auto& pt = cloud_.at(col, ipx);  // (col, row)
       pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
       pt.z = d * std::sin(phi);
       pt.data_c[0] = px.intensity;
       pt.data_c[1] = px.ambient;
       pt.data_c[2] = px.reflectivity;
-      // pt.data_c[3] = meas_id;
+      pt.data_c[3] = curr_col_;
     }
   }
 }

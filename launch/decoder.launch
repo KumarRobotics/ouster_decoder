@@ -8,13 +8,17 @@
     <!-- Gravity at philadelphia from https://www.ngs.noaa.gov/cgi-bin/grav_pdx.prl -->
     <!-- Lat: 39.9526 N, Lon: 75.1652 W, MSL Height: 11.8872, Predicted gravity:  980184 +/- 2 milligals -->
     <arg name="gravity" default="9.80184"/>
+    <arg name="destagger" default="false"/>
 
+    <arg name="sensor_frame" default="os_sensor"/>
     <arg name="lidar_frame" default="os_lidar"/>
     <arg name="imu_frame" default="os_imu"/>
 
     <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder_node" output="screen" ns="$(arg lidar_ns)">
         <!-- params -->
         <param name="gravity" type="double" value="$(arg gravity)"/>
+        <param name="destagger" type="bool" value="$(arg destagger)"/>
+        <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
         <param name="lidar_frame" type="string" value="$(arg lidar_frame)"/>
         <param name="imu_frame" type="string" value="$(arg imu_frame)"/>
 
