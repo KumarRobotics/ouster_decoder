@@ -50,13 +50,10 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   ndiv = Clamp(ndiv, 0, 2);
   const int subscan = std::pow(2, ndiv);
   if (subscan != 1) {
-    ROS_INFO("Publish full scan");
+    ROS_WARN("Divide full scan into %d subscans", subscan);
     // Destagger is disabled if we have more than one subscan
     destagger_ = false;
-  } else {
-    ROS_WARN("Divide full scan into %d subscans", subscan);
   }
-
   ROS_INFO("Gravity: %f", gravity_);
   ROS_INFO("Align: %s", align_ ? "true" : "false");
   ROS_INFO("Destagger: %s", destagger_ ? "true" : "false");
@@ -85,7 +82,9 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
 
   dt_packet_ = model_.dt_meas * pf_->columns_per_packet;  // dt two packet
 
-  Allocate(rows, cols);
+  const int scan_cols = cols / subscan;
+  ROS_INFO("Subscan %d x %d", rows, scan_cols);
+  Allocate(rows, scan_cols);
 
   // ROS
   InitRos();

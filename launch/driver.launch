@@ -20,6 +20,7 @@
         <param name="~/metadata" value="$(arg metadata)"/>
     </node>
 
+    <!-- Get rid of this later -->
     <node pkg="ouster_ros" type="os_cloud_node" name="os_cloud" output="screen" required="true">
         <remap from="~/os_config" to="/os_node/os_config"/>
         <remap from="~/lidar_packets" to="/os_node/lidar_packets"/>
