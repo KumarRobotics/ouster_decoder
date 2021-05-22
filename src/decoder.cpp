@@ -248,6 +248,8 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
       const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
 
+      // col is where the pixel should go in the image
+      // its the same as curr_col when we are in staggered mode
       const int col = destagger_
                           ? (curr_col_ + model_.pixel_shifts[ipx]) % image_.cols
                           : curr_col_;
@@ -265,19 +267,25 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
 
       // Cloud (see software manual figure 3.1)
       const float n = model_.beam_offset;
+      // const float d = range;
       const float d = range - n;
       const float phi = model_.altitudes[ipx];  // from high to low
       const float cos_phi = std::cos(phi);
 
       // TODO (chao): handle invalid case for point
-      auto& pt = cloud_.at(col, ipx);  // (col, row)
+      // For point cloud we always publish staggered
+      // all points in one column have the same time stamp
+      // becaus we can always compute the range image based on xyz
+      auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
       pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
       pt.z = d * std::sin(phi);
+      pt.data[3] = curr_col_;
+
       pt.data_c[0] = px.intensity;
       pt.data_c[1] = px.ambient;
       pt.data_c[2] = px.reflectivity;
-      pt.data_c[3] = curr_col_;
+      pt.data_c[3] = range;
     }
     // increment
     ++curr_col_;

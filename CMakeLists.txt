@@ -25,3 +25,6 @@ target_link_libraries(${PROJECT_NAME}_model_test GTest::Main GTest::GTest
 add_executable(${PROJECT_NAME}_node src/decoder.cpp)
 target_link_libraries(${PROJECT_NAME}_node PUBLIC ${catkin_LIBRARIES}
                                                   ${PROJECT_NAME}_model)
+
+add_executable(${PROJECT_NAME}_example src/example.cpp)
+target_link_libraries(${PROJECT_NAME}_example PUBLIC ${catkin_LIBRARIES})
