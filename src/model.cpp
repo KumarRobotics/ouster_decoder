@@ -1,4 +1,4 @@
-#include "ouster_decoder/model.h"
+#include "model.h"
 
 namespace ouster_decoder {
 

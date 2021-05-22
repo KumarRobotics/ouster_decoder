@@ -1,4 +1,4 @@
-#include "ouster_decoder/model.h"
+#include "model.h"
 
 #include <gtest/gtest.h>
 
@@ -14,7 +14,7 @@ TEST(UtilsTest, TestEncode) {
 
   data.range = 1.0;
   data.theta = 2.0;
-  data.col = 3;
+  data.icol = 3;
   data.intensity = 4;
   data.ambient = 5;
   data.reflectivity = 6;
@@ -26,7 +26,7 @@ TEST(UtilsTest, TestEncode) {
   const auto& d = image.at<LidarData>(0, 0);
   EXPECT_EQ(d.range, 1.0);
   EXPECT_EQ(d.theta, 2.0);
-  EXPECT_EQ(d.col, 3);
+  EXPECT_EQ(d.icol, 3);
   EXPECT_EQ(d.intensity, 4);
 }
 

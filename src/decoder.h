@@ -7,7 +7,7 @@
 
 #include <opencv2/core/mat.hpp>
 
-#include "ouster_decoder/model.h"
+#include "model.h"
 #include "ouster_ros/PacketMsg.h"
 #include "ouster_ros/ros.h"
 
@@ -31,24 +31,28 @@ class Decoder {
   void ImuPacketCb(const ouster_ros::PacketMsg& imu_msg);
 
  private:
+  /// Initialize ros related stuff (frame, publisher, subscriber)
+  void InitRos();
+  /// Send static transforms
+  void SendTransform();
+
+  /// Initialize all parameters
+  void InitParams();
+  /// Initialize ouster related stuff
+  void InitOuster();
+  /// Allocate storage that will be reused
+  void Allocate(int rows, int cols);
+
   /// Decode lidar packet
   void DecodeLidar(const uint8_t* const packet_buf);
-
   /// Decode imu packet
   auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
 
   /// Whether we have had enough data for a full scan (to publish)
   bool HaveFullScan() const noexcept { return curr_col_ >= image_.cols; }
 
-  /// Allocate storage that will be reused
-  void Allocate(int rows, int cols);
-
   /// Publish messages
   void Publish();
-
-  /// Send static transforms
-  void SendTransform();
-
   /// Reset cached data
   void Reset();
 
@@ -73,12 +77,15 @@ class Decoder {
   // data
   cv::Mat image_;
   CloudT cloud_;
-  bool destagger_{};                  // destagger image
-  int curr_col_{0};                   // current column
-  double dt_packet_{};                // time between two packets
-  double gravity_{};                  // gravity
   std::vector<double> azimuths_;      // all azimuth angles (radian)
   std::vector<uint64_t> timestamps_;  // all time stamps (nanosecond)
+
+  // params
+  bool align_{};
+  bool destagger_{};    // destagger image
+  int curr_col_{0};     // current column
+  double dt_packet_{};  // time between two packets
+  double gravity_{};    // gravity
 
   LidarModel model_;
   sensor_msgs::CameraInfoPtr cinfo_msg_;

@@ -5,19 +5,30 @@
 
     <arg name="lidar_ns" default="os"/>
     <arg name="driver_ns" default="/os_node"/>
+
     <!-- Gravity at philadelphia from https://www.ngs.noaa.gov/cgi-bin/grav_pdx.prl -->
     <!-- Lat: 39.9526 N, Lon: 75.1652 W, MSL Height: 11.8872, Predicted gravity:  980184 +/- 2 milligals -->
     <arg name="gravity" default="9.80184"/>
+    <!-- Divide one scan to 2^div subscans, div=0,1,2 -->
+    <arg name="ndiv" default="0"/>
+    <!-- Destagger will be disabled if subscan!=1 -->
     <arg name="destagger" default="false"/>
+    <!-- Align each scan to the start (otherwise will start whenever the first packet arrives) -->
+    <arg name="align" default="true"/>
 
+    <!-- Compatible with ouster_ros  -->
     <arg name="sensor_frame" default="os_sensor"/>
     <arg name="lidar_frame" default="os_lidar"/>
     <arg name="imu_frame" default="os_imu"/>
 
     <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder_node" output="screen" ns="$(arg lidar_ns)">
         <!-- params -->
+        <param name="ndiv" type="int" value="$(arg ndiv)"/>
+        <param name="align" type="bool" value="$(arg align)"/>
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="destagger" type="bool" value="$(arg destagger)"/>
+
+        <!-- frames -->
         <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
         <param name="lidar_frame" type="string" value="$(arg lidar_frame)"/>
         <param name="imu_frame" type="string" value="$(arg imu_frame)"/>
