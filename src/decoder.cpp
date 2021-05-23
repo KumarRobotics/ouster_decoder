@@ -71,11 +71,36 @@ void LidarModel::ToCameraInfo(sensor_msgs::CameraInfo& cinfo) {
 // cloud, imu and static transforms
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   InitOuster();
+  InitParams();
+  InitRos();
+  SendTransform();
+}
 
-  // Params
+void Decoder::InitOuster() {
+  // Call service to retrieve sensor info, this must be done first
+  ouster_ros::OSConfigSrv cfg{};
+  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
+  client.waitForExistence();
+  if (!client.call(cfg)) {
+    throw std::runtime_error("Calling config service failed");
+  }
+
+  // Parsing config
+  info_ = os::parse_metadata(cfg.response.metadata);
+  // ROS_DEBUG_STREAM("Metadata: " << os::to_string(info_));
+  ROS_INFO_STREAM("Lidar mode: " << os::to_string(info_.mode));
+
+  // Get packet format
+  pf_ = &os::get_format(info_);
+  ROS_INFO("Columns per packet: %d", pf_->columns_per_packet);
+  ROS_INFO("Pixels per column: %d", pf_->pixels_per_column);
+}
+
+void Decoder::InitParams() {
   align_ = pnh_.param<bool>("align", false);
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   destagger_ = pnh_.param<bool>("destagger", false);
+
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
   int ndiv = pnh_.param<int>("ndiv", 0);
   ndiv = Clamp(ndiv, 0, 2);
@@ -97,37 +122,13 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
   model_.ToCameraInfo(*cinfo_msg_);
 
-  dt_packet_ = model_.dt_meas * pf_->columns_per_packet;
   const int scan_cols = model_.cols / subscan;
   ROS_INFO("Subscan %d x %d", model_.rows, scan_cols);
   Allocate(model_.rows, scan_cols);
 
-  // ROS
-  InitRos();
-  SendTransform();
+  // For timing purpose
+  dt_packet_ = model_.dt_meas * pf_->columns_per_packet;
 }
-
-void Decoder::InitOuster() {
-  // Call service to retrieve sensor info, this must be done first
-  ouster_ros::OSConfigSrv cfg{};
-  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
-  client.waitForExistence();
-  if (!client.call(cfg)) {
-    throw std::runtime_error("Calling config service failed");
-  }
-
-  // Parsing config
-  info_ = os::parse_metadata(cfg.response.metadata);
-  ROS_DEBUG_STREAM("Metadata: " << os::to_string(info_));
-  ROS_INFO_STREAM("Lidar mode: " << os::to_string(info_.mode));
-
-  // Get packet format
-  pf_ = &os::get_format(info_);
-  ROS_INFO("Columns per packet: %d", pf_->columns_per_packet);
-  ROS_INFO("Pixels per column: %d", pf_->pixels_per_column);
-}
-
-void Decoder::InitParams() {}
 
 void Decoder::InitRos() {
   // Subscribers
@@ -171,7 +172,8 @@ void Decoder::Reset() {
 
 void Decoder::Allocate(int rows, int cols) {
   image_.create(rows, cols, CV_32FC4);
-  cloud_ = CloudT(cols, rows);  // point cloud ctor takes width and height
+  // cloud_ = CloudT(cols, rows);  // point cloud ctor takes width and height
+  cloud_ = CloudT(rows, cols);  // point cloud ctor takes width and height
   timestamps_.resize(cols);
   azimuths_.resize(cols);
 }
@@ -292,7 +294,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       // For point cloud we always publish staggered
       // all points in one column have the same time stamp
       // becaus we can always compute the range image based on xyz
-      auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
+      auto& pt = cloud_.at(ipx, curr_col_);  // (col, row)
       pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
       pt.z = d * std::sin(phi);
@@ -303,11 +305,6 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       pt.b = std::min<uint16_t>(px.ambient, 255);
       pt.a = 255;
       pt.label = shift;  // shift
-      // ROS_INFO_THROTTLE(1,
-      //                   "r %d, g %d, b %d",
-      //                   int(px.reflectivity),
-      //                   int(px.signal),
-      //                   int(px.ambient));
     }
     // increment
     ++curr_col_;

@@ -39,7 +39,6 @@ struct LidarModel {
   std::string prod_line;
 
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo);
-  bool FromCameraInfo(const sensor_msgs::CameraInfo& cinfo);
 };
 
 class Decoder {
@@ -65,10 +64,10 @@ class Decoder {
   /// Send static transforms
   void SendTransform();
 
-  /// Initialize all parameters
-  void InitParams();
   /// Initialize ouster related stuff
   void InitOuster();
+  /// Initialize all parameters
+  void InitParams();
   /// Allocate storage that will be reused
   void Allocate(int rows, int cols);
 
