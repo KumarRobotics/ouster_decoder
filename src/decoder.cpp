@@ -218,7 +218,7 @@ void Decoder::Timing(const ros::Time& start) const {
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - start).toSec();
   const auto ratio = t_proc / dt_packet_;
-  if (ratio > 1.5) {
+  if (ratio > 2.5) {
     ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
              t_proc * 1e3,
              dt_packet_ * 1e3,
@@ -297,12 +297,17 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
       pt.z = d * std::sin(phi);
 
-      //  TODO (chao): these magic numbers might need to be adjusted
-      pt.r = px.reflectivity / 32;
-      pt.g = px.signal / 5;
-      pt.b = px.ambient;
+      // TODO (chao): these magic numbers might need to be adjusted
+      pt.r = std::min<uint16_t>(px.reflectivity / 32, 255);
+      pt.g = std::min<uint16_t>(px.signal / 8, 255);
+      pt.b = std::min<uint16_t>(px.ambient, 255);
       pt.a = 255;
       pt.label = shift;  // shift
+      // ROS_INFO_THROTTLE(1,
+      //                   "r %d, g %d, b %d",
+      //                   int(px.reflectivity),
+      //                   int(px.signal),
+      //                   int(px.ambient));
     }
     // increment
     ++curr_col_;
