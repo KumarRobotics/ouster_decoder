@@ -15,16 +15,8 @@ include(CompilerWarnings)
 add_library(${PROJECT_NAME}_warnings INTERFACE)
 set_target_warnings(${PROJECT_NAME}_warnings)
 
-add_library(${PROJECT_NAME}_model src/model.cpp)
-target_link_libraries(${PROJECT_NAME}_model PUBLIC ${catkin_LIBRARIES}
-                                                   ${PROJECT_NAME}_warnings)
-add_executable(${PROJECT_NAME}_model_test src/model_test.cpp)
-target_link_libraries(${PROJECT_NAME}_model_test GTest::Main GTest::GTest
-                      ${catkin_LIBRARIES})
-
 add_executable(${PROJECT_NAME}_node src/decoder.cpp)
-target_link_libraries(${PROJECT_NAME}_node PUBLIC ${catkin_LIBRARIES}
-                                                  ${PROJECT_NAME}_model)
+target_link_libraries(${PROJECT_NAME}_node PUBLIC ${catkin_LIBRARIES})
 
 add_executable(${PROJECT_NAME}_example src/example.cpp)
 target_link_libraries(${PROJECT_NAME}_example PUBLIC ${catkin_LIBRARIES})

@@ -34,6 +34,37 @@ void TransformDeg2RadInPlace(std::vector<double>& vec) {
 
 namespace os = ouster_ros::sensor;
 
+LidarModel::LidarModel(const os::sensor_info& info) {
+  rows = info.beam_altitude_angles.size();
+  cols = os::n_cols_of_lidar_mode(info.mode);
+  freq = os::frequency_of_lidar_mode(info.mode);
+
+  dt_meas = 1.0 / freq / cols;
+  d_azimuth = kTau / cols;
+  beam_offset = info.lidar_origin_to_beam_origin_mm * kMmToM;
+  pixel_shifts = info.format.pixel_shift_by_row;
+  altitudes = info.beam_altitude_angles;
+  azimuths = info.beam_azimuth_angles;
+  TransformDeg2RadInPlace(altitudes);
+  TransformDeg2RadInPlace(azimuths);
+
+  prod_line = info.prod_line;
+}
+
+void LidarModel::ToCameraInfo(sensor_msgs::CameraInfo& cinfo) {
+  cinfo.height = rows;
+  cinfo.width = cols;
+  cinfo.distortion_model = prod_line;
+
+  cinfo.D.reserve(altitudes.size() + azimuths.size());
+  cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
+  cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
+
+  cinfo.K[0] = dt_meas;    // delta time between two columns
+  cinfo.R[0] = d_azimuth;  // delta angle between two columns
+  cinfo.P[0] = beam_offset;
+}
+
 // Decoder
 // Calls os_config service to get sensor info.
 // Subscribes to lidar and imu packets and publishes image, camera info, point
@@ -59,32 +90,17 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   ROS_INFO("Destagger: %s", destagger_ ? "true" : "false");
 
   // Model
-  const int cols = os::n_cols_of_lidar_mode(info_.mode);
-  const int rows = info_.beam_altitude_angles.size();
-  const int freq = os::frequency_of_lidar_mode(info_.mode);
-  ROS_INFO("Lidar: %d x %d @ %d hz", rows, cols, freq);
-
-  model_.dt_meas = 1.0 / freq / cols;
-  model_.d_azimuth = kTau / cols;
-  model_.beam_offset = info_.lidar_origin_to_beam_origin_mm * kMmToM;
-  model_.altitudes = info_.beam_altitude_angles;
-  model_.azimuths = info_.beam_azimuth_angles;
-  model_.pixel_shifts = info_.format.pixel_shift_by_row;
-  TransformDeg2RadInPlace(model_.altitudes);
-  TransformDeg2RadInPlace(model_.azimuths);
+  model_ = LidarModel(info_);
+  ROS_INFO("Lidar: %d x %d @ %d hz", model_.rows, model_.cols, model_.freq);
 
   // Cinfo
   cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
-  cinfo_msg_->height = rows;
-  cinfo_msg_->width = cols;
-  cinfo_msg_->distortion_model = info_.prod_line;
   model_.ToCameraInfo(*cinfo_msg_);
 
-  dt_packet_ = model_.dt_meas * pf_->columns_per_packet;  // dt two packet
-
-  const int scan_cols = cols / subscan;
-  ROS_INFO("Subscan %d x %d", rows, scan_cols);
-  Allocate(rows, scan_cols);
+  dt_packet_ = model_.dt_meas * pf_->columns_per_packet;
+  const int scan_cols = model_.cols / subscan;
+  ROS_INFO("Subscan %d x %d", model_.rows, scan_cols);
+  Allocate(model_.rows, scan_cols);
 
   // ROS
   InitRos();
@@ -227,7 +243,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     if (align_) {
       if (meas_id == 0) {
         align_ = false;
-        ROS_DEBUG("Aligned to the first measurement");
+        ROS_DEBUG("Align to the first measurement (meas_id = 0)");
       } else {
         continue;
       }
@@ -261,7 +277,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       px.range = range * valid;                      // 32
       px.theta = theta;                              // 32
       px.icol = curr_col_;                           // 16
-      px.intensity = pf.px_signal(px_buf);           // 16
+      px.signal = pf.px_signal(px_buf);              // 16
       px.ambient = pf.px_ambient(px_buf);            // 16
       px.reflectivity = pf.px_reflectivity(px_buf);  // 16
 
@@ -281,8 +297,9 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
       pt.z = d * std::sin(phi);
 
+      //  TODO (chao): these magic numbers might need to be adjusted
       pt.r = px.reflectivity / 32;
-      pt.g = px.intensity / 5;
+      pt.g = px.signal / 5;
       pt.b = px.ambient;
       pt.a = 255;
       pt.label = shift;  // shift

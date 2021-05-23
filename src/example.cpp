@@ -12,9 +12,11 @@ using CloudT = pcl::PointCloud<PointT>;
 
 void CloudCb2(const CloudT& cloud) {
   static cv::Mat image;
+  static cv::Mat image2;
 
   if (image.empty()) {
     image.create(cloud.height, cloud.width, CV_32FC1);
+    image2.create(cloud.height, cloud.width, CV_32FC3);
   }
 
   auto t0 = ros::Time::now();
@@ -28,7 +30,19 @@ void CloudCb2(const CloudT& cloud) {
       // image.at<float>(i, j) = pt.curvature;
     }
   }
-  ROS_INFO("to image: %f ms", (ros::Time::now() - t0).toSec() * 1e3);
+  ROS_INFO("to range image: %f ms", (ros::Time::now() - t0).toSec() * 1e3);
+
+  t0 = ros::Time::now();
+  for (int i = 0; i < cloud.height; ++i) {
+    for (int j = 0; j < cloud.width; ++j) {
+      const auto& pt = cloud.at(j, i);
+      auto* px = image.ptr<cv::Vec3f>(i, j);
+      px[0] = pt.x;
+      px[1] = pt.y;
+      px[2] = pt.z;
+    }
+  }
+  ROS_INFO("to xyz image: %f ms", (ros::Time::now() - t0).toSec() * 1e3);
 
   std_msgs::Header header;
   pcl_conversions::fromPCL(cloud.header, header);

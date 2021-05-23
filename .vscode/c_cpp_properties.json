@@ -3,12 +3,12 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/include",
                 "${workspaceFolder}/src",
                 "/opt/ros/noetic/include",
                 "/usr/include/pcl-1.10",
                 "/usr/local/include/eigen3",
                 "/usr/local/include/opencv4",
+                "/opt/arrayfire/include",
                 "/home/chao/Workspace/ws/ouster_ws/devel/include",
                 "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_ros/include",
                 "/home/chao/Workspace/ws/ouster_ws/src/ouster_example/ouster_client/include",
