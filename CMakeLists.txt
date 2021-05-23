@@ -7,6 +7,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
                                         pcl_conversions sensor_msgs ouster_ros)
 find_package(GTest REQUIRED)
+find_package(TBB REQUIRED)
 
 catkin_package(INCLUDE_DIRS LIBRARIES ${PROJECT_NAME}_model)
 include_directories(include src ${catkin_INCLUDE_DIRS})
@@ -19,4 +20,5 @@ add_executable(${PROJECT_NAME}_node src/decoder.cpp)
 target_link_libraries(${PROJECT_NAME}_node PUBLIC ${catkin_LIBRARIES})
 
 add_executable(${PROJECT_NAME}_example src/example.cpp)
-target_link_libraries(${PROJECT_NAME}_example PUBLIC ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_example PUBLIC ${catkin_LIBRARIES}
+                                                     TBB::tbb)
