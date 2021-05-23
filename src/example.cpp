@@ -7,12 +7,11 @@
 #include <opencv2/core/mat.hpp>
 
 ros::Publisher pub;
-using PointT = pcl::PointXYZI;
+using PointT = pcl::PointXYZRGBL;
 using CloudT = pcl::PointCloud<PointT>;
 
 void CloudCb2(const CloudT& cloud) {
   static cv::Mat image;
-  ROS_INFO("Got cloud: %u x %u", cloud.height, cloud.width);
 
   if (image.empty()) {
     image.create(cloud.height, cloud.width, CV_32FC1);
@@ -22,9 +21,11 @@ void CloudCb2(const CloudT& cloud) {
   for (int i = 0; i < cloud.height; ++i) {
     for (int j = 0; j < cloud.width; ++j) {
       const auto& pt = cloud.at(j, i);
+      // const auto jj = (j + pt.label) % cloud.width;
+
       image.at<float>(i, j) =
           std::sqrt(pt.x * pt.x + pt.y * pt.y + pt.z * pt.z);
-      // image.at<float>(i, j) = pt.data[3];
+      // image.at<float>(i, j) = pt.curvature;
     }
   }
   ROS_INFO("to image: %f ms", (ros::Time::now() - t0).toSec() * 1e3);

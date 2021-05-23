@@ -15,7 +15,7 @@ namespace ouster_decoder {
 
 class Decoder {
  public:
-  using PointT = pcl::PointXYZI;
+  using PointT = pcl::PointXYZRGBL;
   using CloudT = pcl::PointCloud<PointT>;
 
   explicit Decoder(const ros::NodeHandle& pnh);

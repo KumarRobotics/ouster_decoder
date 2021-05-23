@@ -8,8 +8,8 @@
 namespace ouster_decoder {
 
 struct LidarData {
-  float range{};   // range in meter
-  float theta{};   // azimuth angle
+  float range{};    // range in meter
+  float theta{};    // azimuth angle
   uint16_t icol{};  // col in image, used to compute time of this data
   uint16_t intensity{};
   uint16_t ambient{};

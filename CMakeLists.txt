@@ -8,7 +8,7 @@ find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
                                         pcl_conversions sensor_msgs ouster_ros)
 find_package(GTest REQUIRED)
 
-catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME}_model)
+catkin_package(INCLUDE_DIRS LIBRARIES ${PROJECT_NAME}_model)
 include_directories(include src ${catkin_INCLUDE_DIRS})
 
 include(CompilerWarnings)

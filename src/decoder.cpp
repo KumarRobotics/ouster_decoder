@@ -250,9 +250,9 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
 
       // col is where the pixel should go in the image
       // its the same as curr_col when we are in staggered mode
-      const int col = destagger_
-                          ? (curr_col_ + model_.pixel_shifts[ipx]) % image_.cols
-                          : curr_col_;
+      const auto shift = model_.pixel_shifts[ipx];
+      const int col =
+          destagger_ ? (curr_col_ + shift) % image_.cols : curr_col_;
 
       const float range = pf.px_range(px_buf) * kMmToM;
       const float theta = theta0 - model_.azimuths[ipx];
@@ -280,12 +280,12 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
       pt.z = d * std::sin(phi);
-      pt.data[3] = curr_col_;
 
-      pt.data_c[0] = px.intensity;
-      pt.data_c[1] = px.ambient;
-      pt.data_c[2] = px.reflectivity;
-      pt.data_c[3] = range;
+      pt.r = px.reflectivity / 32;
+      pt.g = px.intensity / 5;
+      pt.b = px.ambient;
+      pt.a = 255;
+      pt.label = shift;  // shift
     }
     // increment
     ++curr_col_;
