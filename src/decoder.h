@@ -13,9 +13,9 @@
 namespace ouster_decoder {
 
 struct LidarData {
-  float range{};    // range in meter
-  float theta{};    // azimuth angle
-  uint16_t icol{};  // col in image, used to compute time of this data
+  float range{};     // range in meter
+  float theta{};     // azimuth angle
+  uint16_t shift{};  // pixel shift
   uint16_t signal{};
   uint16_t ambient{};
   uint16_t reflectivity{};
@@ -26,9 +26,11 @@ static_assert(sizeof(LidarData) == sizeof(float) * 4,
 
 struct LidarModel {
   LidarModel() = default;
-  LidarModel(const ouster_ros::sensor::sensor_info& info);
+  explicit LidarModel(const ouster_ros::sensor::sensor_info& info);
 
-  int rows, cols, freq;
+  int rows;
+  int cols;  // cols of a full scan
+  int freq;
   double dt_meas;
   double dt_packet;
   double d_azimuth;
@@ -75,9 +77,9 @@ class Decoder {
   void DecodeLidar(const uint8_t* const packet_buf);
   /// Decode imu packet
   auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
+  /// Whether we have had enough data to publish
 
-  /// Whether we have had enough data for a full scan (to publish)
-  bool HaveFullScan() const noexcept { return curr_col_ >= image_.cols; }
+  bool ShouldPublish() const noexcept { return curr_col_ >= image_.cols; }
 
   /// Publish messages
   void Publish();
@@ -112,8 +114,10 @@ class Decoder {
   bool align_{};
   bool destagger_{};  // destagger image
   int curr_col_{0};   // current column
+  int curr_scan_{0};  // current subscan
   double gravity_{};  // gravity
   double dt_packet_{};
+  double min_range_{};
 
   LidarModel model_;
   sensor_msgs::CameraInfoPtr cinfo_msg_;

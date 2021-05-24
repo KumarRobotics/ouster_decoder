@@ -15,6 +15,8 @@
     <arg name="destagger" default="false"/>
     <!-- Align each scan to the start (otherwise will start whenever the first packet arrives) -->
     <arg name="align" default="true"/>
+    <!-- Minimum range -->
+    <arg name="min_range" default="0.5"/>
 
     <!-- Compatible with ouster_ros  -->
     <arg name="sensor_frame" default="os_sensor"/>
@@ -27,6 +29,7 @@
         <param name="align" type="bool" value="$(arg align)"/>
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="destagger" type="bool" value="$(arg destagger)"/>
+        <param name="min_range" type="double" value="$(arg min_range)"/>
 
         <!-- frames -->
         <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
