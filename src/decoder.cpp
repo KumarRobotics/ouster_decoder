@@ -60,8 +60,8 @@ void LidarModel::ToCameraInfo(sensor_msgs::CameraInfo& cinfo) {
   cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
   cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
 
-  cinfo.K[0] = dt_meas;    // delta time between two columns
-  cinfo.R[0] = d_azimuth;  // delta angle between two columns
+  cinfo.K[0] = dt_meas;
+  cinfo.R[0] = d_azimuth;
   cinfo.P[0] = beam_offset;
 }
 
@@ -170,11 +170,12 @@ void Decoder::Reset() {
   if (curr_scan_ * image_.cols >= model_.cols) {
     curr_scan_ = 0;
   }
-  // No need to zero out if we don't need to destagger
-  if (!destagger_) return;
-  // Otherwise we will zero out the cached data
-  image_.setTo(cv::Scalar());
-  // TODO (chao): set cloud_ to 0
+
+  if (destagger_) {
+    // Zero out cached image in destagger mode
+    image_.setTo(cv::Scalar());
+    // No need for cloud since we set invalid point to nan
+  }
 }
 
 void Decoder::Allocate(int rows, int cols) {

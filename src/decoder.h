@@ -13,12 +13,12 @@
 namespace ouster_decoder {
 
 struct LidarData {
-  float range{};     // range in meter
-  float theta{};     // azimuth angle
-  uint16_t shift{};  // pixel shift
-  uint16_t signal{};
-  uint16_t ambient{};
-  uint16_t reflectivity{};
+  float range{};            // range in meter
+  float theta{};            // azimuth angle
+  uint16_t shift{};         // pixel shift
+  uint16_t signal{};        // signal intensity photon
+  uint16_t ambient{};       // NIR photons
+  uint16_t reflectivity{};  // calibrated reflectivity
 } __attribute__((packed));
 
 static_assert(sizeof(LidarData) == sizeof(float) * 4,
@@ -28,17 +28,16 @@ struct LidarModel {
   LidarModel() = default;
   explicit LidarModel(const ouster_ros::sensor::sensor_info& info);
 
-  int rows;
-  int cols;  // cols of a full scan
-  int freq;
-  double dt_meas;
-  double dt_packet;
-  double d_azimuth;
-  double beam_offset;
-  std::vector<double> azimuths;
-  std::vector<double> altitudes;
-  std::vector<int> pixel_shifts;
-  std::string prod_line;
+  int rows{};                     // number of beams
+  int cols{};                     // cols of a full scan
+  int freq{};                     // frequency
+  double dt_meas{};               // delta time between two columns
+  double d_azimuth{};             // delta angle between two columns
+  double beam_offset{};           // distance between beam to origin
+  std::vector<double> azimuths;   // azimuths offset angles
+  std::vector<double> altitudes;  // altitude angles, high to low
+  std::vector<int> pixel_shifts;  // offset pixel count
+  std::string prod_line;          // produnction line
 
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo);
 };
