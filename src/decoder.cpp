@@ -5,7 +5,6 @@
 #include <pcl_ros/point_cloud.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
-#include <sensor_msgs/PointCloud2.h>
 #include <std_msgs/Header.h>
 
 #include "ouster_ros/OSConfigSrv.h"
@@ -141,9 +140,9 @@ void Decoder::InitRos() {
   ROS_INFO_STREAM("Subscribing imu from: " << imu_sub_.getTopic());
 
   // Publishers
-  cloud_pub_ = pnh_.advertise<sensor_msgs::PointCloud2>("cloud", 10);
-  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
+  cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
   camera_pub_ = it_.advertiseCamera("image", 5);
+  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
   range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
 
   // Frames

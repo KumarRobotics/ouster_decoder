@@ -76,10 +76,9 @@ class Decoder {
   void DecodeLidar(const uint8_t* const packet_buf);
   /// Decode imu packet
   auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
+
   /// Whether we have had enough data to publish
-
   bool ShouldPublish() const noexcept { return curr_col_ >= image_.cols; }
-
   /// Publish messages
   void Publish();
   /// Reset cached data
