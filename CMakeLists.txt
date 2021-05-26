@@ -10,16 +10,19 @@ find_package(GTest REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Boost REQUIRED COMPONENTS timer)
 
-catkin_package(INCLUDE_DIRS LIBRARIES ${PROJECT_NAME}_model)
-include_directories(include src ${catkin_INCLUDE_DIRS})
+catkin_package()
 
 include(CompilerWarnings)
 add_library(${PROJECT_NAME}_warnings INTERFACE)
 set_target_warnings(${PROJECT_NAME}_warnings)
 
 add_executable(${PROJECT_NAME}_node src/decoder.cpp)
+target_include_directories(${PROJECT_NAME}_node PUBLIC src
+                                                       ${catkin_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME}_node PUBLIC ${catkin_LIBRARIES})
 
 add_executable(${PROJECT_NAME}_example src/example.cpp)
+target_include_directories(${PROJECT_NAME}_example
+                           PUBLIC ${catkin_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME}_example PUBLIC ${catkin_LIBRARIES}
                                                      TBB::tbb Boost::timer)

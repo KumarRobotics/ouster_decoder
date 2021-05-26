@@ -11,11 +11,16 @@
     <arg name="gravity" default="9.80184"/>
     <!-- Divide one scan to 2^div subscans, div=0,1,2 -->
     <arg name="ndiv" default="0"/>
-    <!-- Destagger will be disabled if subscan!=1 -->
+    <!-- Destagger will be disabled if ndiv > 0 or subscan > 1.
+    It is strongly advised to set destagger to false. 
+    Due to the non-central projection model of the outser lidar, destaggering by pixel offset would still produce artifacts in the range image.
+    It is recommended to re-compute a range image from the point cloud if needed -->
     <arg name="destagger" default="false"/>
-    <!-- Align each scan to the start (otherwise will start whenever the first packet arrives) -->
+    <!-- Align each scan to the start (otherwise will start whenever the first packet arrives)
+    It is strongly advised to set this to true, otherwise a scan could start at any point in time, 
+    which would cause every run to look different from a bag file if not careful -->
     <arg name="align" default="true"/>
-    <!-- Minimum range -->
+    <!-- Minimum range, image pixel below this range will be set to 0 and point set to NaN -->
     <arg name="min_range" default="0.5"/>
 
     <!-- Compatible with ouster_ros  -->

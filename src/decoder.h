@@ -74,6 +74,7 @@ class Decoder {
 
   /// Decode lidar packet
   void DecodeLidar(const uint8_t* const packet_buf);
+  void DecodeColumn(const uint8_t* const col_buf);
   /// Decode imu packet
   auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
 
@@ -105,7 +106,6 @@ class Decoder {
   // data
   cv::Mat image_;
   CloudT cloud_;
-  std::vector<double> azimuths_;      // all azimuth angles (radian)
   std::vector<uint64_t> timestamps_;  // all time stamps (nanosecond)
 
   // params

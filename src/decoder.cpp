@@ -163,18 +163,17 @@ void Decoder::SendTransform() {
 }
 
 void Decoder::Reset() {
-  // Reset curr_col
-  curr_col_ = 0;
+  // Reset curr_col (usually 0 but in the rare case that data jumps forward it
+  // will be non-zero)
+  curr_col_ = curr_col_ % image_.cols;
   // Reset curr_scan if we got a full sweep
   if (curr_scan_ * image_.cols >= model_.cols) {
     curr_scan_ = 0;
   }
 
-  if (destagger_) {
-    // Zero out cached image in destagger mode
-    image_.setTo(cv::Scalar());
-    // No need for cloud since we set invalid point to nan
-  }
+  // Zero out image and cloud, to handle random jump forward in packets
+  image_.setTo(cv::Scalar());
+  std::fill(cloud_.begin(), cloud_.end(), PointT{});
 }
 
 void Decoder::Allocate(int rows, int cols) {
@@ -182,7 +181,6 @@ void Decoder::Allocate(int rows, int cols) {
   cloud_ = CloudT(cols, rows);  // point cloud ctor takes width and height
   // cloud_ = CloudT(rows, cols);  // point cloud ctor takes width and height
   timestamps_.resize(cols);
-  azimuths_.resize(cols);
 }
 
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
@@ -192,7 +190,6 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
   // We have data for the entire range image
   if (ShouldPublish()) {
     Publish();
-    Reset();
     Timing(start);
   }
 }
@@ -219,7 +216,7 @@ void Decoder::Publish() {
   // Increment curr_scan
   ++curr_scan_;
 
-  // Publish range image to test destagger
+  // Publish range image
   if (range_pub_.getNumSubscribers() > 0) {
     cv::Mat range;
     cv::extractChannel(image_, range, 0);
@@ -229,13 +226,16 @@ void Decoder::Publish() {
   // Publish cloud
   pcl_conversions::toPCL(header, cloud_.header);
   cloud_pub_.publish(cloud_);
+
+  // Reset cached data after publish
+  Reset();
 }
 
 void Decoder::Timing(const ros::Time& start) const {
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - start).toSec();
   const auto ratio = t_proc / dt_packet_;
-  if (ratio > 2.5) {
+  if (ratio > 3) {
     ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
              t_proc * 1e3,
              dt_packet_ * 1e3,
@@ -249,94 +249,117 @@ void Decoder::Timing(const ros::Time& start) const {
 }
 
 void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
-  const auto& pf = *pf_;
-  static uint16_t prev_meas_id;
+  static int prev_mid = -1;
+  static int prev_fid = -1;
 
+  const auto& pf = *pf_;
   for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
     // Get all the relevant data
     const uint8_t* col_buf = pf.nth_col(icol, packet_buf);
-    const uint16_t meas_id = pf.col_measurement_id(col_buf);
+    const auto fid = static_cast<int>(pf.col_frame_id(col_buf));
+    const auto mid = static_cast<int>(pf.col_measurement_id(col_buf));
 
-    // Do alignment
+    // Do alignment: this will make sure the first column of the first subscan
+    // corresponds to mid 0
     if (align_) {
-      if (meas_id == 0) {
+      if (mid == 0) {
         align_ = false;
-        ROS_DEBUG("Align start of scan to to m_id=0");
+        ROS_DEBUG("Align start of first subscan to mid 0");
       } else {
         continue;
       }
     }
 
-    if (meas_id > 0) {
-      // need to make sure meas_id = prev_meas_id + 1
-      ROS_ERROR_COND(meas_id != prev_meas_id + 1,
-                     "prev_meas_id=%d, meas_id=%d",
-                     (int)prev_meas_id,
-                     (int)meas_id);
-    }
-
-    prev_meas_id = meas_id;
-
-    // const uint16_t frame_id = pf.col_frame_id(col_buf);
-    const uint64_t t_ns = pf.col_timestamp(col_buf);
-    const uint32_t encoder = pf.col_encoder(col_buf);  // not necessary
-    const uint32_t status = pf.col_status(col_buf);
-    const bool col_valid = (status == 0xffffffff);
-
-    // Compute azimuth angle theta0, this should always be valid
-    // const auto theta0 = kTau - meas_id * model_.d_azimuth;
-    const float theta0 = kTau * (1.0f - encoder / 90112.0f);
-    timestamps_.at(curr_col_) = t_ns;
-    azimuths_.at(curr_col_) = theta0;
-
-    for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
-      const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
-
-      // col is where the pixel should go in the image
-      // its the same as curr_col when we are in staggered mode
-      const auto shift = model_.pixel_shifts[ipx];
-      const int im_col =
-          destagger_ ? (curr_col_ + shift) % image_.cols : curr_col_;
-
-      const float range = pf.px_range(px_buf) * kMmToM;
-      const float theta = theta0 - model_.azimuths[ipx];
-      const bool px_valid = col_valid && (min_range_ <= range);
-
-      auto& px = image_.at<LidarData>(ipx, im_col);
-      px.range = range * px_valid;                   // 32
-      px.theta = theta;                              // 32
-      px.shift = shift;                              // 16
-      px.signal = pf.px_signal(px_buf);              // 16
-      px.ambient = pf.px_ambient(px_buf);            // 16
-      px.reflectivity = pf.px_reflectivity(px_buf);  // 16
-
-      // Cloud (see software manual figure 3.1)
-      const float n = model_.beam_offset;
-      const float d = range - n;
-      const float phi = model_.altitudes[ipx];  // from high to low
-      const float cos_phi = std::cos(phi);
-
-      // For point cloud we always publish staggered
-      // all points in one column have the same time stamp
-      // becaus we can always compute the range image based on xyz
-      auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
-      if (px_valid) {
-        pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
-        pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
-        pt.z = d * std::sin(phi);
-
-        // TODO (chao): these magic numbers might need to be adjusted
-        pt.r = std::min<uint16_t>(px.reflectivity / 32, 255);
-        pt.g = std::min<uint16_t>(px.signal / 8, 255);
-        pt.b = std::min<uint16_t>(px.ambient, 255);
-        pt.a = 255;
-        pt.label = shift;  // shift
-      } else {
-        pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
+    // Data verification
+    // The lidar packets from ouster would randomly jump forward, we need to
+    // handle this case by skipping forward as well
+    if (prev_mid >= 0 && prev_fid >= 0) {
+      // Ideally we should have
+      int ind = mid + fid * model_.cols;
+      int prev_ind = prev_mid + prev_fid * model_.cols;
+      int diff_ind = ind - prev_ind;
+      if (diff_ind != 1) {
+        ROS_ERROR("Packet jumped from %d:%d to %d:%d by %d columns",
+                  prev_fid,
+                  prev_mid,
+                  fid,
+                  mid,
+                  diff_ind);
+        // We detect a jump in the data, so we need to forward curr_col_
+        curr_col_ += (diff_ind - 1);
+        // It is possible that this jump will span two scans, so if that is the
+        // case, we need to publish the previous one before moving forward
+        if (ShouldPublish()) {
+          ROS_WARN("Jump into the second scan, need to publish the first one");
+          Publish();
+        }
       }
     }
+    prev_mid = mid;
+    prev_fid = fid;
+
+    DecodeColumn(col_buf);
     // increment
     ++curr_col_;
+  }
+}
+
+void Decoder::DecodeColumn(const uint8_t* const col_buf) {
+  const auto& pf = *pf_;
+
+  const uint64_t t_ns = pf.col_timestamp(col_buf);
+  const uint32_t encoder = pf.col_encoder(col_buf);  // not necessary
+  const uint32_t status = pf.col_status(col_buf);
+  const bool col_valid = (status == 0xffffffff);
+
+  // Compute azimuth angle theta0, this should always be valid
+  // const auto theta0 = kTau - mid * model_.d_azimuth;
+  const float theta0 = kTau * (1.0f - encoder / 90112.0f);
+  timestamps_.at(curr_col_) = t_ns;
+
+  for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
+    const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
+
+    // im_col is where the pixel should go in the image
+    // its the same as curr_col when we are in staggered mode
+    const auto shift = model_.pixel_shifts[ipx];
+    const int im_col =
+        destagger_ ? (curr_col_ + shift) % image_.cols : curr_col_;
+
+    const float range = pf.px_range(px_buf) * kMmToM;
+    const float theta = theta0 - model_.azimuths[ipx];
+    const bool px_valid = col_valid && (min_range_ <= range);
+
+    auto& px = image_.at<LidarData>(ipx, im_col);
+    px.range = range * px_valid;                   // 32
+    px.theta = theta;                              // 32
+    px.shift = shift;                              // 16
+    px.signal = pf.px_signal(px_buf);              // 16
+    px.ambient = pf.px_ambient(px_buf);            // 16
+    px.reflectivity = pf.px_reflectivity(px_buf);  // 16
+
+    // Cloud (see software manual figure 3.1)
+    const float n = model_.beam_offset;
+    const float d = range - n;
+    const float phi = model_.altitudes[ipx];  // from high to low
+    const float cos_phi = std::cos(phi);
+
+    // For point cloud we always publish staggered
+    // all points in one column have the same time stamp
+    // because we can always compute the range image based on xyz
+    auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
+    if (px_valid) {
+      pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
+      pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
+      pt.z = d * std::sin(phi);
+
+      // TODO (chao): these magic numbers might need to be adjusted
+      pt.r = std::min<uint16_t>(px.reflectivity / 32, 255);
+      pt.g = std::min<uint16_t>(px.signal / 8, 255);
+      pt.b = std::min<uint16_t>(px.ambient, 255);
+      pt.a = 255;
+      pt.label = shift;  // TODO (chao): this might be useless
+    }
   }
 }
 
