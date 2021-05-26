@@ -36,37 +36,19 @@ void CloudToRange(const pcl::PointCloud<T>& cloud, cv::Mat& image) {
   for (int i = 0; i < cloud.height; ++i) {
     for (int j = 0; j < cloud.width; ++j) {
       const auto& p = cloud.at(j, i);
-      const auto range = PointRange(p);
       if (std::isnan(p.x)) continue;
 
-      auto theta = std::atan2(p.y, p.x);
-      theta = theta > 0 ? M_PI * 2 - theta : -theta;
-      const int col = static_cast<int>(theta / d_theta + 0.5);
+      const auto range = PointRange(p);
+      if (range < 0.5 || range > 100) continue;
+
+      float theta = std::atan2(p.y, p.x);
+      theta = theta > 0.0 ? M_PI * 2 - theta : -theta;
+      const int col = static_cast<int>(theta / d_theta);
       image.at<float>(i, col) = PointRange(p);
+
+      ROS_INFO("%f", (double)theta);
     }
   }
-}
-
-template <typename T>
-void CloudToRangePar(const pcl::PointCloud<T>& cloud, cv::Mat& image) {
-  const float d_theta = M_PI * 2 / cloud.width;
-
-  tbb::parallel_for(tbb::blocked_range<int>(0, cloud.height),
-                    [&](const tbb::blocked_range<int>& range) {
-                      for (int i = range.begin(); i < range.end(); ++i) {
-                        for (int j = 0; j < cloud.width; ++j) {
-                          const auto& p = cloud.at(j, i);
-                          const auto range = PointRange(p);
-                          if (std::isnan(p.x)) continue;
-
-                          auto theta = std::atan2(p.y, p.x);
-                          theta = theta > 0 ? M_PI * 2 - theta : -theta;
-                          const int col =
-                              static_cast<int>(theta / d_theta + 0.5);
-                          image.at<float>(i, col) = PointRange(p);
-                        }
-                      }
-                    });
 }
 
 // Ouster original
@@ -88,6 +70,7 @@ void CloudMeCb(const CloudMe& cloud) {
     for (int j = 0; j < cloud.width; ++j) {
       const auto& p = cloud.at(j, i);
       const int col = (j + p.label) % cloud.width;
+      if (std::isnan(p.x)) continue;
       shift.at<float>(i, col) = PointRange(p);
     }
   }
@@ -101,7 +84,7 @@ void CloudMeCb(const CloudMe& cloud) {
 int main(int argc, char** argv) {
   ros::init(argc, argv, "os_example");
 
-  ros::NodeHandle pnh("~");
+  ros::NodeHandle pnh;
   ros::Subscriber sub_os = pnh.subscribe("cloud_os", 5, &CloudOsCb);
   ros::Subscriber sub_me = pnh.subscribe("cloud_me", 5, &CloudMeCb);
 

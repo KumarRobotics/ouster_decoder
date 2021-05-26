@@ -279,7 +279,6 @@ void Decoder::VerifyData(int fid, int mid) {
           mid,
           jump);
       ros::shutdown();
-      // exit(EXIT_FAILURE);
     } else if (jump > 0) {
       ROS_ERROR("Packet jumped from f%d:m%d to f%d:m%d by %d columns",
                 prev_fid,
@@ -396,6 +395,8 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
       pt.b = std::min<uint16_t>(px.ambient, 255);
       pt.a = 255;
       pt.label = shift;  // TODO (chao): this might be useless
+    } else {
+      pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
     }
   }
 }
