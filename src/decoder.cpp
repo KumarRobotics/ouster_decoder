@@ -394,10 +394,11 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
       pt.g = std::min<uint16_t>(px.signal / 8, 255);
       pt.b = std::min<uint16_t>(px.ambient, 255);
       pt.a = 255;
-      pt.label = shift;  // TODO (chao): this might be useless
     } else {
       pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
     }
+
+    pt.label = shift;
   }
 }
 

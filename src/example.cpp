@@ -45,8 +45,6 @@ void CloudToRange(const pcl::PointCloud<T>& cloud, cv::Mat& image) {
       theta = theta > 0.0 ? M_PI * 2 - theta : -theta;
       const int col = static_cast<int>(theta / d_theta);
       image.at<float>(i, col) = PointRange(p);
-
-      ROS_INFO("%f", (double)theta);
     }
   }
 }
@@ -69,7 +67,7 @@ void CloudMeCb(const CloudMe& cloud) {
   for (int i = 0; i < cloud.height; ++i) {
     for (int j = 0; j < cloud.width; ++j) {
       const auto& p = cloud.at(j, i);
-      const int col = (j + p.label) % cloud.width;
+      const int col = (j + p.label - 32) % cloud.width;
       if (std::isnan(p.x)) continue;
       shift.at<float>(i, col) = PointRange(p);
     }
@@ -84,7 +82,7 @@ void CloudMeCb(const CloudMe& cloud) {
 int main(int argc, char** argv) {
   ros::init(argc, argv, "os_example");
 
-  ros::NodeHandle pnh;
+  ros::NodeHandle pnh("~");
   ros::Subscriber sub_os = pnh.subscribe("cloud_os", 5, &CloudOsCb);
   ros::Subscriber sub_me = pnh.subscribe("cloud_me", 5, &CloudMeCb);
 
