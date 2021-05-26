@@ -6,7 +6,7 @@
     <arg name="replay" default="true" doc="do not connect to a sensor; expect /os_node/{lidar,imu}_packets from replay"/>
     <arg name="lidar_mode" default="" doc="resolution and rate: either 512x10, 512x20, 1024x10, 1024x20, or 2048x10"/>
     <arg name="timestamp_mode" default="" doc="method used to timestamp measurements: TIME_FROM_INTERNAL_OSC, TIME_FROM_SYNC_PULSE_IN, TIME_FROM_PTP_1588"/>
-    <arg name="metadata" default="$(find ouster_decoder)/launch/os1_1024.json" doc="override default metadata file for replays"/>
+    <arg name="metadata" default="$(find ouster_decoder)/launch/data2.json" doc="override default metadata file for replays"/>
     <arg name="tf_prefix" default="" doc="namespace for tf transforms"/>
 
     <node pkg="ouster_ros" type="os_node" name="os_node" output="screen" required="true">

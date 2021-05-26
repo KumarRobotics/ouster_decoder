@@ -179,8 +179,8 @@ void Decoder::Reset() {
 
 void Decoder::Allocate(int rows, int cols) {
   image_.create(rows, cols, CV_32FC4);
-  // cloud_ = CloudT(cols, rows);  // point cloud ctor takes width and height
-  cloud_ = CloudT(rows, cols);  // point cloud ctor takes width and height
+  cloud_ = CloudT(cols, rows);  // point cloud ctor takes width and height
+  // cloud_ = CloudT(rows, cols);  // point cloud ctor takes width and height
   timestamps_.resize(cols);
   azimuths_.resize(cols);
 }
@@ -250,6 +250,7 @@ void Decoder::Timing(const ros::Time& start) const {
 
 void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
   const auto& pf = *pf_;
+  static uint16_t prev_meas_id;
 
   for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
     // Get all the relevant data
@@ -260,10 +261,21 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     if (align_) {
       if (meas_id == 0) {
         align_ = false;
+        ROS_DEBUG("Align start of scan to to m_id=0");
       } else {
         continue;
       }
     }
+
+    if (meas_id > 0) {
+      // need to make sure meas_id = prev_meas_id + 1
+      ROS_ERROR_COND(meas_id != prev_meas_id + 1,
+                     "prev_meas_id=%d, meas_id=%d",
+                     (int)prev_meas_id,
+                     (int)meas_id);
+    }
+
+    prev_meas_id = meas_id;
 
     // const uint16_t frame_id = pf.col_frame_id(col_buf);
     const uint64_t t_ns = pf.col_timestamp(col_buf);
@@ -307,7 +319,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       // For point cloud we always publish staggered
       // all points in one column have the same time stamp
       // becaus we can always compute the range image based on xyz
-      auto& pt = cloud_.at(ipx, curr_col_);  // (col, row)
+      auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
       if (px_valid) {
         pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
         pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
