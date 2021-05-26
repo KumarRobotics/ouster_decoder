@@ -166,14 +166,16 @@ void Decoder::Reset() {
   // Reset curr_col (usually 0 but in the rare case that data jumps forward it
   // will be non-zero)
   curr_col_ = curr_col_ % image_.cols;
+
   // Reset curr_scan if we got a full sweep
   if (curr_scan_ * image_.cols >= model_.cols) {
     curr_scan_ = 0;
   }
 
-  // Zero out image and cloud, to handle random jump forward in packets
-  image_.setTo(cv::Scalar());
-  std::fill(cloud_.begin(), cloud_.end(), PointT{});
+  // Zero out image in destagger mode
+  if (destagger_) {
+    image_.setTo(cv::Scalar());
+  }
 }
 
 void Decoder::Allocate(int rows, int cols) {
@@ -248,59 +250,94 @@ void Decoder::Timing(const ros::Time& start) const {
                      ratio);
 }
 
-void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
+bool Decoder::WaitForAlign(int mid) {
+  if (align_ && mid == 0) {
+    align_ = false;
+    ROS_DEBUG("Align start of the first subscan to mid 0");
+  }
+  return align_;
+}
+
+void Decoder::VerifyData(int fid, int mid) {
   static int prev_mid = -1;
   static int prev_fid = -1;
 
+  if (prev_mid >= 0 && prev_fid >= 0) {
+    // Compute uid of the current and previous measurement
+    const int uid = model_.Uid(fid, mid);
+    const int prev_uid = model_.Uid(prev_fid, prev_mid);
+
+    // Ideally the jump should be 0
+    const int jump = uid - prev_uid - 1;
+    if (jump < 0) {
+      ROS_FATAL(
+          "Packet jumped from f%d:m%d to f%d:m%d by %d columns, which is "
+          "backwards in time, shutting down.",
+          prev_fid,
+          prev_mid,
+          fid,
+          mid,
+          jump);
+      ros::shutdown();
+      // exit(EXIT_FAILURE);
+    } else if (jump > 0) {
+      ROS_ERROR("Packet jumped from f%d:m%d to f%d:m%d by %d columns",
+                prev_fid,
+                prev_mid,
+                fid,
+                mid,
+                jump);
+
+      // Detect a jump, we need to forward curr_col_ by the same amount (jump)
+      // We could directly increment curr_col_ and publish if necessary, but
+      // this will require us to zero the whole cloud at publish time which is
+      // very time consuming. Therefore, we choose to advance curr_col_ slowly
+      // and zero out each column in the point cloud (no need to do it for the
+      // image, see Reset()).
+      for (int i = 0; i < jump; ++i, ++curr_col_) {
+        // It is possible that this jump will span two scans, so if that is
+        // the case, we need to publish the previous scan before moving forward
+        if (ShouldPublish()) {
+          ROS_WARN("Jump into a new scan, need to publish the previous one");
+          Publish();
+        }
+        ZeroCloudColumn();
+      }
+    }
+  }
+
+  prev_mid = mid;
+  prev_fid = fid;
+}
+
+void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
   const auto& pf = *pf_;
+
   for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
     // Get all the relevant data
     const uint8_t* col_buf = pf.nth_col(icol, packet_buf);
     const auto fid = static_cast<int>(pf.col_frame_id(col_buf));
     const auto mid = static_cast<int>(pf.col_measurement_id(col_buf));
 
-    // Do alignment: this will make sure the first column of the first subscan
-    // corresponds to mid 0
-    if (align_) {
-      if (mid == 0) {
-        align_ = false;
-        ROS_DEBUG("Align start of first subscan to mid 0");
-      } else {
-        continue;
-      }
+    // If we set the align param to true then this will wait for mid = 0 to
+    // start a scan
+    if (WaitForAlign(mid)) {
+      continue;
     }
 
     // Data verification
-    // The lidar packets from ouster would randomly jump forward, we need to
-    // handle this case by skipping forward as well
-    if (prev_mid >= 0 && prev_fid >= 0) {
-      // Ideally we should have
-      int ind = mid + fid * model_.cols;
-      int prev_ind = prev_mid + prev_fid * model_.cols;
-      int diff_ind = ind - prev_ind;
-      if (diff_ind != 1) {
-        ROS_ERROR("Packet jumped from %d:%d to %d:%d by %d columns",
-                  prev_fid,
-                  prev_mid,
-                  fid,
-                  mid,
-                  diff_ind);
-        // We detect a jump in the data, so we need to forward curr_col_
-        curr_col_ += (diff_ind - 1);
-        // It is possible that this jump will span two scans, so if that is the
-        // case, we need to publish the previous one before moving forward
-        if (ShouldPublish()) {
-          ROS_WARN("Jump into the second scan, need to publish the first one");
-          Publish();
-        }
-      }
-    }
-    prev_mid = mid;
-    prev_fid = fid;
-
+    VerifyData(fid, mid);
     DecodeColumn(col_buf);
-    // increment
+
+    // increment at last since we have a continue before
     ++curr_col_;
+  }
+}
+
+void Decoder::ZeroCloudColumn() {
+  for (int ipx = 0; ipx < cloud_.height; ++ipx) {
+    auto& pt = cloud_.at(curr_col_, ipx);
+    pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
   }
 }
 

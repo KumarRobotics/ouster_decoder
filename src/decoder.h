@@ -39,6 +39,8 @@ struct LidarModel {
   std::vector<int> pixel_shifts;  // offset pixel count
   std::string prod_line;          // produnction line
 
+  // Return a unique id of this col measurement
+  int Uid(int fid, int mid) const noexcept { return fid * cols + mid; }
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo);
 };
 
@@ -74,7 +76,15 @@ class Decoder {
 
   /// Decode lidar packet
   void DecodeLidar(const uint8_t* const packet_buf);
+  /// Decode one column in the lidar packet
   void DecodeColumn(const uint8_t* const col_buf);
+  /// Zero out the current column in the cloud
+  void ZeroCloudColumn();
+  /// 
+  void VerifyData(int fid, int mid);
+  /// Whether we are still waiting for alignment to mid 0
+  bool WaitForAlign(int mid);
+
   /// Decode imu packet
   auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
 

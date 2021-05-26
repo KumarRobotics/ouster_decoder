@@ -6,10 +6,8 @@
 
     <node pkg="ouster_decoder" type="ouster_decoder_example" name="os_example" output="screen" ns="$(arg lidar_ns)">
         <!-- input topics -->
-        <remap from="~cloud" to="cloud"/>
-        <remap from="~imu" to="imu"/>
-        <remap from="~image" to="image"/>
-        <remap from="~camera_info" to="camera_info"/>
+        <remap from="~cloud_me" to="cloud"/>
+        <remap from="~cloud_os" to="/os_cloud/points"/>
     </node>
 
 </launch>
