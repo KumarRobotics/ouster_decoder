@@ -6,7 +6,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
                                         pcl_conversions sensor_msgs ouster_ros)
-find_package(GTest REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Boost REQUIRED COMPONENTS timer)
 

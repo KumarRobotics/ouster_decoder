@@ -8,8 +8,6 @@
 
 #include <boost/timer/timer.hpp>
 #include <opencv2/core/mat.hpp>
-#include <opencv2/highgui.hpp>
-#include <string_view>
 
 using PointMe = pcl::PointXYZRGBL;
 using CloudMe = pcl::PointCloud<PointMe>;
@@ -37,7 +35,7 @@ void FillPixel(float* row, const Point& p, float d_theta) {
   float theta = std::atan2(p.y, p.x);
   theta = theta > 0.0 ? M_PI * 2 - theta : -theta;
   const int col = static_cast<int>(theta / d_theta);
-  row[col] = PointRange(p);
+  row[col] = range;
 }
 
 template <typename T>
@@ -66,7 +64,6 @@ void CloudToRangePar(const pcl::PointCloud<T>& cloud, cv::Mat& image) {
                     });
 }
 
-// Ouster original
 void CloudOsCb(const CloudOs& cloud) {
   cv::Mat range = cv::Mat(cloud.height, cloud.width, CV_32FC1, cv::Scalar{});
   timer.start();
