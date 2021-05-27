@@ -33,9 +33,13 @@ void FillPixel(float* row, const Point& p, float d_theta) {
 
   const auto range = PointRange(p);
   float theta = std::atan2(p.y, p.x);
-  theta = theta > 0.0 ? M_PI * 2 - theta : -theta;
+  theta = theta > 0 ? M_PI * 2 - theta : -theta;
+  // theta = theta > 0 ? theta : theta + M_PI * 2;
   const int col = static_cast<int>(theta / d_theta);
-  row[col] = range;
+  // There are just a lot of bad points so we need to threshold
+  if (range > 0.1) {
+    row[col] = range;
+  }
 }
 
 template <typename T>
