@@ -80,7 +80,7 @@ class Decoder {
   void DecodeColumn(const uint8_t* const col_buf);
   /// Zero out the current column in the cloud
   void ZeroCloudColumn();
-  /// 
+  ///
   void VerifyData(int fid, int mid);
   /// Whether we are still waiting for alignment to mid 0
   bool WaitForAlign(int mid);
@@ -120,12 +120,11 @@ class Decoder {
 
   // params
   bool align_{};
-  bool destagger_{};  // destagger image
-  int curr_col_{0};   // current column
-  int curr_scan_{0};  // current subscan
-  double gravity_{};  // gravity
-  double dt_packet_{};
-  double min_range_{};
+  bool destagger_{};    // destagger image
+  int curr_col_{0};     // current column
+  int curr_scan_{0};    // current subscan
+  double gravity_{};    // gravity
+  double dt_packet_{};  // time between two packets
 
   LidarModel model_;
   sensor_msgs::CameraInfoPtr cinfo_msg_;

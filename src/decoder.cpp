@@ -99,7 +99,6 @@ void Decoder::InitParams() {
   align_ = pnh_.param<bool>("align", false);
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   destagger_ = pnh_.param<bool>("destagger", false);
-  min_range_ = pnh_.param<double>("min_range_", 0.5);
 
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
   int ndiv = pnh_.param<int>("ndiv", 0);
@@ -237,7 +236,7 @@ void Decoder::Timing(const ros::Time& start) const {
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - start).toSec();
   const auto ratio = t_proc / dt_packet_;
-  if (ratio > 3) {
+  if (ratio > 5) {
     ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
              t_proc * 1e3,
              dt_packet_ * 1e3,
@@ -280,13 +279,14 @@ void Decoder::VerifyData(int fid, int mid) {
           jump);
       ros::shutdown();
     } else if (jump > 0) {
-      ROS_ERROR("Packet jumped from f%d:m%d to f%d:m%d by %d columns",
+      ROS_ERROR("Packet jumped from f%d:m%d to f%d:m%d by %d columns.",
                 prev_fid,
                 prev_mid,
                 fid,
                 mid,
                 jump);
 
+      const auto start = ros::Time::now();
       // Detect a jump, we need to forward curr_col_ by the same amount (jump)
       // We could directly increment curr_col_ and publish if necessary, but
       // this will require us to zero the whole cloud at publish time which is
@@ -297,11 +297,13 @@ void Decoder::VerifyData(int fid, int mid) {
         // It is possible that this jump will span two scans, so if that is
         // the case, we need to publish the previous scan before moving forward
         if (ShouldPublish()) {
-          ROS_WARN("Jump into a new scan, need to publish the previous one");
+          ROS_WARN("Jumped into a new scan, need to publish the previous one");
           Publish();
         }
         ZeroCloudColumn();
       }
+
+      Timing(start);
     }
   }
 
@@ -324,8 +326,10 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       continue;
     }
 
-    // Data verification
+    // Sometimes the lidar packet will jump forward by a large chunk, we handle
+    // this case here
     VerifyData(fid, mid);
+
     DecodeColumn(col_buf);
 
     // increment at last since we have a continue before
@@ -344,13 +348,18 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
   const auto& pf = *pf_;
 
   const uint64_t t_ns = pf.col_timestamp(col_buf);
-  const uint32_t encoder = pf.col_encoder(col_buf);  // not necessary
+  const uint32_t encoder = pf.col_encoder(col_buf);
   const uint32_t status = pf.col_status(col_buf);
   const bool col_valid = (status == 0xffffffff);
 
   // Compute azimuth angle theta0, this should always be valid
   // const auto theta0 = kTau - mid * model_.d_azimuth;
   const float theta0 = kTau * (1.0f - encoder / 90112.0f);
+  if (!timestamps_.empty() && timestamps_.back() > t_ns) {
+    ROS_FATAL("Timestamp going backwards last %zu, current %zu",
+              timestamps_.back(),
+              t_ns);
+  }
   timestamps_.at(curr_col_) = t_ns;
 
   for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
@@ -364,7 +373,7 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
 
     const float range = pf.px_range(px_buf) * kMmToM;
     const float theta = theta0 - model_.azimuths[ipx];
-    const bool px_valid = col_valid && (min_range_ <= range);
+    const bool px_valid = col_valid;
 
     auto& px = image_.at<LidarData>(ipx, im_col);
     px.range = range * px_valid;                   // 32
@@ -384,6 +393,7 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
     // all points in one column have the same time stamp
     // because we can always compute the range image based on xyz
     auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
+    pt.label = shift;  // can save 4 bytes if remove this field
     if (px_valid) {
       pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
       pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
@@ -397,8 +407,6 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
     } else {
       pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
     }
-
-    pt.label = shift;
   }
 }
 

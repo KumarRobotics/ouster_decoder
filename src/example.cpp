@@ -29,30 +29,49 @@ void Timing(const std::string& msg, const boost::timer::cpu_times& t) {
   ROS_INFO("%s %f ms", msg.c_str(), t.wall / 1e6);
 }
 
+template <typename Point>
+void FillPixel(float* row, const Point& p, float d_theta) {
+  if (std::isnan(p.x)) return;
+
+  const auto range = PointRange(p);
+  float theta = std::atan2(p.y, p.x);
+  theta = theta > 0.0 ? M_PI * 2 - theta : -theta;
+  const int col = static_cast<int>(theta / d_theta);
+  row[col] = PointRange(p);
+}
+
 template <typename T>
 void CloudToRange(const pcl::PointCloud<T>& cloud, cv::Mat& image) {
   const float d_theta = M_PI * 2 / cloud.width;
 
   for (int i = 0; i < cloud.height; ++i) {
     for (int j = 0; j < cloud.width; ++j) {
-      const auto& p = cloud.at(j, i);
-      if (std::isnan(p.x)) continue;
-
-      const auto range = PointRange(p);
-      if (range < 0.5 || range > 100) continue;
-
-      float theta = std::atan2(p.y, p.x);
-      theta = theta > 0.0 ? M_PI * 2 - theta : -theta;
-      const int col = static_cast<int>(theta / d_theta);
-      image.at<float>(i, col) = PointRange(p);
+      FillPixel(image.ptr<float>(i), cloud.at(j, i), d_theta);
     }
   }
+}
+
+template <typename T>
+void CloudToRangePar(const pcl::PointCloud<T>& cloud, cv::Mat& image) {
+  const float d_theta = M_PI * 2 / cloud.width;
+
+  tbb::parallel_for(tbb::blocked_range<int>(0, cloud.height),
+                    [&](const tbb::blocked_range<int>& br) {
+                      for (int i = br.begin(); i < br.end(); ++i) {
+                        for (int j = 0; j < cloud.width; ++j) {
+                          FillPixel(
+                              image.ptr<float>(i), cloud.at(j, i), d_theta);
+                        }
+                      }
+                    });
 }
 
 // Ouster original
 void CloudOsCb(const CloudOs& cloud) {
   cv::Mat range = cv::Mat(cloud.height, cloud.width, CV_32FC1, cv::Scalar{});
-  CloudToRange(cloud, range);
+  timer.start();
+  CloudToRangePar(cloud, range);
+  Timing("Os cloud to range: ", timer.elapsed());
 
   std_msgs::Header header;
   pcl_conversions::fromPCL(cloud.header, header);
@@ -61,17 +80,24 @@ void CloudOsCb(const CloudOs& cloud) {
 
 void CloudMeCb(const CloudMe& cloud) {
   cv::Mat range = cv::Mat(cloud.height, cloud.width, CV_32FC1, cv::Scalar{});
-  CloudToRange(cloud, range);
+  timer.start();
+  CloudToRangePar(cloud, range);
+  Timing("Me cloud to range: ", timer.elapsed());
 
   cv::Mat shift = cv::Mat(cloud.height, cloud.width, CV_32FC1, cv::Scalar{});
+  // ouster img_node use the first pixel in the first row as the start of
+  // the image, therefore we need subtract this offset
+  timer.start();
+  const int offset = cloud.front().label;
   for (int i = 0; i < cloud.height; ++i) {
     for (int j = 0; j < cloud.width; ++j) {
       const auto& p = cloud.at(j, i);
-      const int col = (j + p.label - 32) % cloud.width;
       if (std::isnan(p.x)) continue;
+      const int col = (j + p.label - offset) % cloud.width;
       shift.at<float>(i, col) = PointRange(p);
     }
   }
+  Timing("Me cloud to shift: ", timer.elapsed());
 
   std_msgs::Header header;
   pcl_conversions::fromPCL(cloud.header, header);
