@@ -13,7 +13,7 @@ catkin_package()
 
 include(CompilerWarnings)
 add_library(${PROJECT_NAME}_warnings INTERFACE)
-set_target_warnings(${PROJECT_NAME}_warnings)
+enable_warnings(${PROJECT_NAME}_warnings)
 
 add_executable(${PROJECT_NAME}_node src/decoder.cpp)
 target_include_directories(${PROJECT_NAME}_node PUBLIC src

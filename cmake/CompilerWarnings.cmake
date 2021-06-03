@@ -2,7 +2,7 @@
 #
 # https://github.com/lefticus/cppbestpractices/blob/master/02-Use_the_Tools_Available.md
 
-function(set_target_warnings target)
+function(enable_warnings target)
 
   set(CLANG_WARNINGS
       -Wall

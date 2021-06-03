@@ -13,6 +13,8 @@ namespace ouster_decoder {
 
 namespace {
 
+constexpr float kFloatInf = std::numeric_limits<float>::infinity();
+constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
 constexpr double kPi = M_PI;
 constexpr double kTau = 2 * kPi;
 constexpr double kMmToM = 0.001f;
@@ -300,7 +302,8 @@ void Decoder::VerifyData(int fid, int mid) {
           ROS_WARN("Jumped into a new scan, need to publish the previous one");
           Publish();
         }
-        ZeroCloudColumn();
+        // zero cloud column at curr_col_
+        ZeroCloudColumn(curr_col_);
       }
 
       Timing(start);
@@ -337,9 +340,9 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
   }
 }
 
-void Decoder::ZeroCloudColumn() {
+void Decoder::ZeroCloudColumn(int col) {
   for (int ipx = 0; ipx < cloud_.height; ++ipx) {
-    auto& pt = cloud_.at(curr_col_, ipx);
+    auto& pt = cloud_.at(col, ipx);
     pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
   }
 }
@@ -371,33 +374,41 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
     const int im_col =
         destagger_ ? (curr_col_ + shift) % image_.cols : curr_col_;
 
-    const float range = pf.px_range(px_buf) * kMmToM;
+    const uint32_t raw_range = pf.px_range(px_buf);
+    const float range = raw_range * kMmToM;
     const float theta = theta0 - model_.azimuths[ipx];
-    const bool px_valid = col_valid;
 
     auto& px = image_.at<LidarData>(ipx, im_col);
-    px.range = range * px_valid;                   // 32
+    px.range = col_valid ? range : kFloatNaN;      // 32
     px.theta = theta;                              // 32
     px.shift = shift;                              // 16
     px.signal = pf.px_signal(px_buf);              // 16
     px.ambient = pf.px_ambient(px_buf);            // 16
     px.reflectivity = pf.px_reflectivity(px_buf);  // 16
 
-    // Cloud (see software manual figure 3.1)
-    const float n = model_.beam_offset;
-    const float d = range - n;
-    const float phi = model_.altitudes[ipx];  // from high to low
-    const float cos_phi = std::cos(phi);
-
     // For point cloud we always publish staggered
     // all points in one column have the same time stamp
     // because we can always compute the range image based on xyz
+    // https://www.ros.org/reps/rep-0117.html
     auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
     pt.label = shift;  // can save 4 bytes if remove this field
-    if (px_valid) {
-      pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
-      pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
-      pt.z = d * std::sin(phi);
+    if (col_valid) {
+      if (raw_range == 0) {
+        // This indicates no return, set to inf
+        pt.x = pt.y = pt.z = kFloatInf;
+      } else if (range <= 0.25) {
+        // TODO (chao): too close to measure, set to NaN for now
+        pt.x = pt.y = pt.z = kFloatNaN;
+      } else {
+        // Cloud (see software manual figure 3.1)
+        const float n = model_.beam_offset;
+        const float d = range - n;
+        const float phi = model_.altitudes[ipx];
+        const float cos_phi = std::cos(phi);
+        pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
+        pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
+        pt.z = d * std::sin(phi);
+      }
 
       // TODO (chao): these magic numbers might need to be adjusted
       pt.r = std::min<uint16_t>(px.reflectivity / 32, 255);
@@ -405,7 +416,8 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
       pt.b = std::min<uint16_t>(px.ambient, 255);
       pt.a = 255;
     } else {
-      pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
+      // Invalid data, set to NaN
+      pt.x = pt.y = pt.z = kFloatNaN;
     }
   }
 }

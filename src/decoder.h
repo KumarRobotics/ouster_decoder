@@ -79,7 +79,7 @@ class Decoder {
   /// Decode one column in the lidar packet
   void DecodeColumn(const uint8_t* const col_buf);
   /// Zero out the current column in the cloud
-  void ZeroCloudColumn();
+  void ZeroCloudColumn(int col);
   ///
   void VerifyData(int fid, int mid);
   /// Whether we are still waiting for alignment to mid 0
