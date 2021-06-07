@@ -31,11 +31,11 @@ struct LidarModel {
   int rows{};                     // number of beams
   int cols{};                     // cols of a full scan
   int freq{};                     // frequency
-  double dt_meas{};               // delta time between two columns
-  double d_azimuth{};             // delta angle between two columns
+  double dt_meas{};               // delta time between two columns [s]
+  double d_azimuth{};             // delta angle between two columns [rad]
   double beam_offset{};           // distance between beam to origin
-  std::vector<double> azimuths;   // azimuths offset angles
-  std::vector<double> altitudes;  // altitude angles, high to low
+  std::vector<double> azimuths;   // azimuths offset angles [rad]
+  std::vector<double> altitudes;  // altitude angles, high to low [rad]
   std::vector<int> pixel_shifts;  // offset pixel count
   std::string prod_line;          // produnction line
 
@@ -114,6 +114,8 @@ class Decoder {
   ouster_ros::sensor::packet_format const* pf_;
 
   // data
+  LidarModel model_;
+  sensor_msgs::CameraInfoPtr cinfo_msg_;
   cv::Mat image_;
   CloudT cloud_;
   std::vector<uint64_t> timestamps_;  // all time stamps (nanosecond)
@@ -125,9 +127,6 @@ class Decoder {
   int curr_scan_{0};    // current subscan
   double gravity_{};    // gravity
   double dt_packet_{};  // time between two packets
-
-  LidarModel model_;
-  sensor_msgs::CameraInfoPtr cinfo_msg_;
 };
 
 }  // namespace ouster_decoder

@@ -296,12 +296,9 @@ void Decoder::VerifyData(int fid, int mid) {
       // very time consuming. Therefore, we choose to advance curr_col_ slowly
       // and zero out each column in the point cloud (no need to do it for the
       // image, see Reset()).
-      int i = 0;
-      while (i < jump) {
-        // zero cloud column at curr_col_
-        ZeroCloudColumn(curr_col_);
-        ++i;
-        ++curr_col_;
+      for (int i = 0; i < jump; ++i) {
+        // zero cloud column at curr_col_ and then increment
+        ZeroCloudColumn(curr_col_++);
 
         // It is possible that this jump will span two scans, so if that is
         // the case, we need to publish the previous scan before moving forward
@@ -337,7 +334,6 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     // Sometimes the lidar packet will jump forward by a large chunk, we handle
     // this case here
     VerifyData(fid, mid);
-
     CHECK_LT(curr_col_, image_.cols);
     DecodeColumn(col_buf);
 

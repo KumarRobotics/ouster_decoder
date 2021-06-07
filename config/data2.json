@@ -139,9 +139,9 @@
     "data_format": {
         "column_window": [
             0,
-            2047
+            1023
         ],
-        "columns_per_frame": 2048,
+        "columns_per_frame": 1024,
         "columns_per_packet": 16,
         "pixel_shift_by_row": [
             32,
@@ -232,7 +232,7 @@
         1
     ],
     "json_calibration_version": 3,
-    "lidar_mode": "2048x10",
+    "lidar_mode": "1024x10",
     "lidar_origin_to_beam_origin_mm": 15.806,
     "lidar_to_sensor_transform": [
         -1,
