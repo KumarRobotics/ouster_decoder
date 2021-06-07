@@ -1,6 +1,7 @@
 #include "decoder.h"
 
 #include <cv_bridge/cv_bridge.h>
+#include <glog/logging.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -295,15 +296,19 @@ void Decoder::VerifyData(int fid, int mid) {
       // very time consuming. Therefore, we choose to advance curr_col_ slowly
       // and zero out each column in the point cloud (no need to do it for the
       // image, see Reset()).
-      for (int i = 0; i < jump; ++i, ++curr_col_) {
+      int i = 0;
+      while (i < jump) {
+        // zero cloud column at curr_col_
+        ZeroCloudColumn(curr_col_);
+        ++i;
+        ++curr_col_;
+
         // It is possible that this jump will span two scans, so if that is
         // the case, we need to publish the previous scan before moving forward
         if (ShouldPublish()) {
-          ROS_WARN("Jumped into a new scan, need to publish the previous one");
+          ROS_DEBUG("Jumped into a new scan, need to publish the previous one");
           Publish();
         }
-        // zero cloud column at curr_col_
-        ZeroCloudColumn(curr_col_);
       }
 
       Timing(start);
@@ -333,6 +338,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     // this case here
     VerifyData(fid, mid);
 
+    CHECK_LT(curr_col_, image_.cols);
     DecodeColumn(col_buf);
 
     // increment at last since we have a continue before
@@ -343,7 +349,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
 void Decoder::ZeroCloudColumn(int col) {
   for (int ipx = 0; ipx < cloud_.height; ++ipx) {
     auto& pt = cloud_.at(col, ipx);
-    pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
+    pt.x = pt.y = pt.z = kFloatNaN;
   }
 }
 
