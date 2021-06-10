@@ -1,7 +1,6 @@
 #include "decoder.h"
 
 #include <cv_bridge/cv_bridge.h>
-#include <glog/logging.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -334,7 +333,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     // Sometimes the lidar packet will jump forward by a large chunk, we handle
     // this case here
     VerifyData(fid, mid);
-    CHECK_LT(curr_col_, image_.cols);
+    // CHECK_LT(curr_col_, image_.cols);
     DecodeColumn(col_buf);
 
     // increment at last since we have a continue before

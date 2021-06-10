@@ -6,10 +6,11 @@
     <arg name="replay" default="true" doc="do not connect to a sensor; expect /os_node/{lidar,imu}_packets from replay"/>
     <arg name="lidar_mode" default="" doc="resolution and rate: either 512x10, 512x20, 1024x10, 1024x20, or 2048x10"/>
     <arg name="timestamp_mode" default="" doc="method used to timestamp measurements: TIME_FROM_INTERNAL_OSC, TIME_FROM_SYNC_PULSE_IN, TIME_FROM_PTP_1588"/>
-    <arg name="metadata" default="$(find ouster_decoder)/config/data2.json" doc="override default metadata file for replays"/>
+    <arg name="metadata" default="" doc="override default metadata file for replays"/>
     <arg name="tf_prefix" default="" doc="namespace for tf transforms"/>
 
-    <node pkg="ouster_ros" type="os_node" name="os_node" output="screen" required="true">
+    <!-- <node pkg="ouster_ros" type="os_node" name="os_node" output="screen" required="true"> -->
+    <node pkg="ouster_decoder" type="ouster_driver" name="os_node" output="screen" required="true">
         <param name="~/lidar_mode" type="string" value="$(arg lidar_mode)"/>
         <param name="~/timestamp_mode" type="string" value="$(arg timestamp_mode)"/>
         <param name="~/replay" value="$(arg replay)"/>
@@ -21,7 +22,7 @@
     </node>
 
     <!-- Get rid of this later -->
-    <node pkg="ouster_ros" type="os_cloud_node" name="os_cloud" output="screen" required="true">
+    <!-- <node pkg="ouster_ros" type="os_cloud_node" name="os_cloud" output="screen" required="true">
         <remap from="~/os_config" to="/os_node/os_config"/>
         <remap from="~/lidar_packets" to="/os_node/lidar_packets"/>
         <remap from="~/imu_packets" to="/os_node/imu_packets"/>
@@ -31,5 +32,5 @@
     <node pkg="ouster_ros" name="img_node" type="img_node" output="screen" required="true">
         <remap from="~/os_config" to="/os_node/os_config"/>
         <remap from="~/points" to="/os_cloud_node/points"/>
-    </node>
+    </node> -->
 </launch>

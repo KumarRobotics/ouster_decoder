@@ -1,7 +1,7 @@
 /opt/ros/noetic/include
-/usr/include/pcl-1.10
 /usr/local/include/eigen3
 /usr/local/include/opencv4
+/usr/include/pcl-1.10
 
 ~/Workspace/ws/ouster_ws/devel/include
 ~/Workspace/repo/versatran01/ouster_example/ouster_client/include
