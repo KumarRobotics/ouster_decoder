@@ -104,22 +104,51 @@ int connection_loop(ros::NodeHandle& nh,
   return EXIT_SUCCESS;
 }
 
+void AdvertiseService(ros::NodeHandle& nh,
+                      ros::ServiceServer& srv,
+                      const sensor::sensor_info& info) {
+  auto metadata = sensor::to_string(info);
+  ROS_INFO("Using lidar_mode: %s", sensor::to_string(info.mode).c_str());
+  ROS_INFO("%s sn: %s firmware rev: %s",
+           info.prod_line.c_str(),
+           info.sn.c_str(),
+           info.fw_rev.c_str());
+  if (srv) {
+    // shutdown first and readvertise
+    ROS_INFO("Shutting down %s service and re-advertise",
+             srv.getService().c_str());
+    srv.shutdown();
+  }
+  srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
+      "os_config",
+      [metadata](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
+        if (metadata.size()) {
+          res.metadata = metadata;
+          return true;
+        } else
+          return false;
+      });
+  ROS_INFO("Advertise service to %s", srv.getService().c_str());
+}
+
 int main(int argc, char** argv) {
   ros::init(argc, argv, "os_node");
   ros::NodeHandle nh("~");
   // Extra stuff
   ros::Publisher pub_meta;
   ros::Subscriber sub_meta;
+  ros::ServiceServer srv;
 
   std::string published_metadata;
-  auto srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
-      "os_config", [&](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
-        if (published_metadata.size()) {
-          res.metadata = published_metadata;
-          return true;
-        } else
-          return false;
-      });
+  // auto srv = nh.advertiseService<OSConfigSrv::Request,
+  // OSConfigSrv::Response>(
+  //     "os_config", [&](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
+  //       if (published_metadata.size()) {
+  //         res.metadata = published_metadata;
+  //         return true;
+  //       } else
+  //         return false;
+  //     });
 
   // empty indicates "not set" since roslaunch xml can't optionally set params
   auto hostname = nh.param("sensor_hostname", std::string{});
@@ -168,14 +197,9 @@ int main(int argc, char** argv) {
   if (replay) {
     ROS_INFO("Running in replay mode");
 
-    auto meta_cb = [&published_metadata](const std_msgs::String& str_msg) {
+    auto meta_cb = [&nh, &srv](const std_msgs::String& str_msg) {
       auto info = sensor::parse_metadata(str_msg.data);
-      published_metadata = to_string(info);
-      ROS_INFO("Using lidar_mode: %s", sensor::to_string(info.mode).c_str());
-      ROS_INFO("%s sn: %s firmware rev: %s",
-               info.prod_line.c_str(),
-               info.sn.c_str(),
-               info.fw_rev.c_str());
+      AdvertiseService(nh, srv, info);
     };
 
     // populate info for config service
@@ -183,17 +207,13 @@ int main(int argc, char** argv) {
       if (meta_file.empty()) {
         sub_meta = nh.subscribe<std_msgs::String, const std_msgs::String&>(
             "metadata", 1, meta_cb);
-        ROS_INFO("metadata is empty, trying to subscribe to %s",
+        ROS_INFO("metadata is empty, subscribing to %s",
                  sub_meta.getTopic().c_str());
+
       } else {
-        ROS_INFO("metadata is provided, using %s", meta_file.c_str());
+        ROS_INFO("metadata file is given, using %s", meta_file.c_str());
         auto info = sensor::metadata_from_json(meta_file);
-        published_metadata = to_string(info);
-        ROS_INFO("Using lidar_mode: %s", sensor::to_string(info.mode).c_str());
-        ROS_INFO("%s sn: %s firmware rev: %s",
-                 info.prod_line.c_str(),
-                 info.sn.c_str(),
-                 info.fw_rev.c_str());
+        AdvertiseService(nh, srv, info);
       }
 
       // just serve config service
@@ -219,6 +239,10 @@ int main(int argc, char** argv) {
 
     // write metadata file to cwd (usually ~/.ros)
     auto metadata = sensor::get_metadata(*cli);
+    if (!meta_file.size() && hostname.size()) {
+      meta_file = hostname + ".json";
+      ROS_INFO("metadata empty, use hostname instead: %s", meta_file.c_str());
+    }
     write_metadata(meta_file, metadata);
 
     // populate sensor info
