@@ -39,6 +39,10 @@ struct LidarModel {
   std::vector<int> pixel_shifts;  // offset pixel count
   std::string prod_line;          // produnction line
 
+  void ToPoint(Eigen::Ref<Eigen::Array3f> pt,
+               float range,
+               float theta0,
+               int row);
   // Return a unique id of this col measurement
   int Uid(int fid, int mid) const noexcept { return fid * cols + mid; }
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo);

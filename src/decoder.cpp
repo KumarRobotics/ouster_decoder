@@ -19,16 +19,20 @@ constexpr double kPi = M_PI;
 constexpr double kTau = 2 * kPi;
 constexpr double kMmToM = 0.001f;
 constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
-constexpr double deg2rad(double deg) { return deg * kPi / 180.0; }
-constexpr double rad2deg(double rad) { return rad * 180.0 / kPi; }
+constexpr double Deg2Rad(double deg) { return deg * kPi / 180.0; }
 template <typename T>
 constexpr T Clamp(const T& v, const T& lo, const T& hi) {
   return std::max(lo, std::min(v, hi));
 }
 
 // Convert a vector of double from deg to rad
-void TransformDeg2RadInPlace(std::vector<double>& vec) {
-  std::transform(vec.begin(), vec.end(), vec.begin(), deg2rad);
+std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
+  std::vector<double> rads;
+  rads.reserve(degs.size());
+  for (const auto& deg : degs) {
+    rads.push_back(Deg2Rad(deg));
+  }
+  return rads;
 }
 
 }  // namespace
@@ -44,12 +48,25 @@ LidarModel::LidarModel(const os::sensor_info& info) {
   d_azimuth = kTau / cols;
   beam_offset = info.lidar_origin_to_beam_origin_mm * kMmToM;
   pixel_shifts = info.format.pixel_shift_by_row;
-  altitudes = info.beam_altitude_angles;
-  azimuths = info.beam_azimuth_angles;
-  TransformDeg2RadInPlace(altitudes);
-  TransformDeg2RadInPlace(azimuths);
+  altitudes = TransformDeg2Rad(info.beam_altitude_angles);
+  azimuths = TransformDeg2Rad(info.beam_azimuth_angles);
 
   prod_line = info.prod_line;
+}
+
+void LidarModel::ToPoint(Eigen::Ref<Eigen::Array3f> pt,
+                         float range,
+                         float theta0,
+                         int row) {
+  const float n = beam_offset;
+  const float d = range - n;
+  const float phi = altitudes[row];
+  const float cos_phi = std::cos(phi);
+  const float theta = theta0 - azimuths[row];
+
+  pt.x() = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
+  pt.y() = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
+  pt.z() = d * std::sin(phi);
 }
 
 void LidarModel::ToCameraInfo(sensor_msgs::CameraInfo& cinfo) {
@@ -359,11 +376,8 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
   // Compute azimuth angle theta0, this should always be valid
   // const auto theta0 = kTau - mid * model_.d_azimuth;
   const float theta0 = kTau * (1.0f - encoder / 90112.0f);
-  if (!timestamps_.empty() && timestamps_.back() > t_ns) {
-    ROS_FATAL("Timestamp going backwards last %zu, current %zu",
-              timestamps_.back(),
-              t_ns);
-  }
+  // TODO (chao): if we have missing packets then the first time stamp could be
+  // wrong
   timestamps_.at(curr_col_) = t_ns;
 
   for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
@@ -402,13 +416,7 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
         pt.x = pt.y = pt.z = kFloatNaN;
       } else {
         // Cloud (see software manual figure 3.1)
-        const float n = model_.beam_offset;
-        const float d = range - n;
-        const float phi = model_.altitudes[ipx];
-        const float cos_phi = std::cos(phi);
-        pt.x = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
-        pt.y = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
-        pt.z = d * std::sin(phi);
+        model_.ToPoint(pt.getArray3fMap(), range, theta0, ipx);
       }
 
       // TODO (chao): these magic numbers might need to be adjusted
@@ -439,9 +447,9 @@ auto Decoder::DecodeImu(const uint8_t* const buf) -> sensor_msgs::Imu {
   m.linear_acceleration.y = static_cast<double>(pf.imu_la_y(buf)) * gravity_;
   m.linear_acceleration.z = static_cast<double>(pf.imu_la_z(buf)) * gravity_;
 
-  m.angular_velocity.x = deg2rad(pf.imu_av_x(buf));
-  m.angular_velocity.y = deg2rad(pf.imu_av_y(buf));
-  m.angular_velocity.z = deg2rad(pf.imu_av_z(buf));
+  m.angular_velocity.x = Deg2Rad(pf.imu_av_x(buf));
+  m.angular_velocity.y = Deg2Rad(pf.imu_av_y(buf));
+  m.angular_velocity.z = Deg2Rad(pf.imu_av_z(buf));
 
   for (int i = 0; i < 9; ++i) {
     m.orientation_covariance[i] = -1;
