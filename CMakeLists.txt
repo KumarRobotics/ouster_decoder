@@ -6,6 +6,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
                                         pcl_conversions sensor_msgs ouster_ros)
+find_package(benchmark)
+find_package(TBB)
 
 catkin_package()
 
@@ -13,15 +15,17 @@ include(CompilerWarnings)
 add_library(${PROJECT_NAME}_warnings INTERFACE)
 enable_warnings(${PROJECT_NAME}_warnings)
 
+add_library(ouster_decoder_base INTERFACE)
+target_include_directories(ouster_decoder_base INTERFACE ${catkin_INCLUDE_DIRS})
+target_link_libraries(ouster_decoder_base INTERFACE ${catkin_LIBRARIES})
+
 add_executable(ouster_decoder src/decoder.cpp)
-target_include_directories(ouster_decoder PUBLIC src ${catkin_INCLUDE_DIRS})
-target_link_libraries(ouster_decoder PUBLIC ${catkin_LIBRARIES})
+target_link_libraries(ouster_decoder PRIVATE ouster_decoder_base)
 
 add_executable(ouster_driver src/driver.cpp)
-target_include_directories(ouster_driver PUBLIC ${catkin_INCLUDE_DIRS})
-target_link_libraries(ouster_driver PUBLIC ${catkin_LIBRARIES})
+target_link_libraries(ouster_driver PRIVATE ouster_decoder_base)
 
-# add_executable(${PROJECT_NAME}_example src/example.cpp)
-# target_include_directories(${PROJECT_NAME}_example PUBLIC
-# ${catkin_INCLUDE_DIRS}) target_link_libraries(${PROJECT_NAME}_example PUBLIC
-# ${catkin_LIBRARIES} TBB::tbb Boost::timer)
+add_executable(pcl_bench src/bench.cpp)
+target_link_libraries(
+  pcl_bench PRIVATE ouster_decoder_base TBB::tbb benchmark::benchmark
+                    benchmark::benchmark_main)
