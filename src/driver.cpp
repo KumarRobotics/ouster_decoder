@@ -255,6 +255,16 @@ int main(int argc, char** argv) {
     std_msgs::String meta_msg;
     meta_msg.data = published_metadata;
     pub_meta.publish(meta_msg);
+    ROS_INFO("Publish metadata to %s", pub_meta.getTopic().c_str());
+
+    srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
+        "os_config", [&](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
+          if (published_metadata.size()) {
+            res.metadata = published_metadata;
+            return true;
+          } else
+            return false;
+        });
 
     ROS_INFO("Using lidar_mode: %s", sensor::to_string(info.mode).c_str());
     ROS_INFO("%s sn: %s firmware rev: %s",
