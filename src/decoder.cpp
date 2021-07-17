@@ -15,6 +15,35 @@
 
 namespace ouster_decoder {
 
+namespace {
+
+constexpr float kFloatInf = std::numeric_limits<float>::infinity();
+constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
+constexpr double kPi = M_PI;
+constexpr double kTau = 2 * kPi;
+constexpr double kMmToM = 0.001f;
+constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
+constexpr double Deg2Rad(double deg) { return deg * kPi / 180.0; }
+template <typename T>
+constexpr T Clamp(const T& v, const T& lo, const T& hi) {
+  return std::max(lo, std::min(v, hi));
+}
+
+// Convert a vector of double from deg to rad
+std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
+  std::vector<double> rads;
+  rads.reserve(degs.size());
+  for (const auto& deg : degs) {
+    rads.push_back(Deg2Rad(deg));
+  }
+  return rads;
+}
+
+}  // namespace
+
+namespace os = ouster_ros::sensor;
+
+/// @brief stores decoded lidar data from a packet
 struct LidarData {
   float range{};            // range in meter
   float theta{};            // azimuth angle
@@ -27,9 +56,10 @@ struct LidarData {
 static_assert(sizeof(LidarData) == sizeof(float) * 4,
               "Size of LidarData must be 4 floats (16 bytes)");
 
+/// @brief stores lidar sensor info
 struct LidarModel {
   LidarModel() = default;
-  explicit LidarModel(const ouster_ros::sensor::sensor_info& info);
+  explicit LidarModel(const os::sensor_info& info);
 
   int rows{};                     // number of beams
   int cols{};                     // cols of a full scan
@@ -51,9 +81,56 @@ struct LidarModel {
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo);
 };
 
+LidarModel::LidarModel(const os::sensor_info& info) {
+  rows = info.beam_altitude_angles.size();
+  cols = os::n_cols_of_lidar_mode(info.mode);
+  freq = os::frequency_of_lidar_mode(info.mode);
+
+  dt_col = 1.0 / freq / cols;
+  d_azimuth = kTau / cols;
+  beam_offset = info.lidar_origin_to_beam_origin_mm * kMmToM;
+  pixel_shifts = info.format.pixel_shift_by_row;
+  altitudes = TransformDeg2Rad(info.beam_altitude_angles);
+  azimuths = TransformDeg2Rad(info.beam_azimuth_angles);
+
+  prod_line = info.prod_line;
+}
+
+void LidarModel::ToPoint(Eigen::Ref<Eigen::Array3f> pt,
+                         float range,
+                         float theta0,
+                         int row) {
+  const float n = beam_offset;
+  const float d = range - n;
+  const float phi = altitudes[row];
+  const float cos_phi = std::cos(phi);
+  const float theta = theta0 - azimuths[row];
+
+  pt.x() = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
+  pt.y() = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
+  pt.z() = d * std::sin(phi);
+}
+
+void LidarModel::ToCameraInfo(sensor_msgs::CameraInfo& cinfo) {
+  cinfo.height = rows;
+  cinfo.width = cols;
+  cinfo.distortion_model = prod_line;
+
+  cinfo.D.reserve(altitudes.size() + azimuths.size());
+  cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
+  cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
+
+  cinfo.K[0] = dt_col;
+  cinfo.R[0] = d_azimuth;
+  cinfo.P[0] = beam_offset;
+}
+
+// TODO: move some stuff to this class
+struct LidarScan {};
+
 class Decoder {
  public:
-  using PointT = pcl::PointXYZRGBL;
+  using PointT = pcl::PointXYZRGB;
   using CloudT = pcl::PointCloud<PointT>;
 
   explicit Decoder(const ros::NodeHandle& pnh);
@@ -136,78 +213,6 @@ class Decoder {
   double dt_packet_{};  // time between two packets
 };
 
-namespace {
-
-constexpr float kFloatInf = std::numeric_limits<float>::infinity();
-constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
-constexpr double kPi = M_PI;
-constexpr double kTau = 2 * kPi;
-constexpr double kMmToM = 0.001f;
-constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
-constexpr double Deg2Rad(double deg) { return deg * kPi / 180.0; }
-template <typename T>
-constexpr T Clamp(const T& v, const T& lo, const T& hi) {
-  return std::max(lo, std::min(v, hi));
-}
-
-// Convert a vector of double from deg to rad
-std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
-  std::vector<double> rads;
-  rads.reserve(degs.size());
-  for (const auto& deg : degs) {
-    rads.push_back(Deg2Rad(deg));
-  }
-  return rads;
-}
-
-}  // namespace
-
-namespace os = ouster_ros::sensor;
-
-LidarModel::LidarModel(const os::sensor_info& info) {
-  rows = info.beam_altitude_angles.size();
-  cols = os::n_cols_of_lidar_mode(info.mode);
-  freq = os::frequency_of_lidar_mode(info.mode);
-
-  dt_col = 1.0 / freq / cols;
-  d_azimuth = kTau / cols;
-  beam_offset = info.lidar_origin_to_beam_origin_mm * kMmToM;
-  pixel_shifts = info.format.pixel_shift_by_row;
-  altitudes = TransformDeg2Rad(info.beam_altitude_angles);
-  azimuths = TransformDeg2Rad(info.beam_azimuth_angles);
-
-  prod_line = info.prod_line;
-}
-
-void LidarModel::ToPoint(Eigen::Ref<Eigen::Array3f> pt,
-                         float range,
-                         float theta0,
-                         int row) {
-  const float n = beam_offset;
-  const float d = range - n;
-  const float phi = altitudes[row];
-  const float cos_phi = std::cos(phi);
-  const float theta = theta0 - azimuths[row];
-
-  pt.x() = d * std::cos(theta) * cos_phi + n * std::cos(theta0);
-  pt.y() = d * std::sin(theta) * cos_phi + n * std::sin(theta0);
-  pt.z() = d * std::sin(phi);
-}
-
-void LidarModel::ToCameraInfo(sensor_msgs::CameraInfo& cinfo) {
-  cinfo.height = rows;
-  cinfo.width = cols;
-  cinfo.distortion_model = prod_line;
-
-  cinfo.D.reserve(altitudes.size() + azimuths.size());
-  cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
-  cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
-
-  cinfo.K[0] = dt_col;
-  cinfo.R[0] = d_azimuth;
-  cinfo.P[0] = beam_offset;
-}
-
 // Decoder
 // Calls os_config service to get sensor info.
 // Subscribes to lidar and imu packets and publishes image, camera info, point
@@ -246,11 +251,11 @@ void Decoder::InitParams() {
 
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
   int ndiv = pnh_.param<int>("ndiv", 0);
-  ndiv = Clamp(ndiv, 0, 2);
-  const int subscan = std::pow(2, ndiv);
+  ndiv = Clamp(ndiv, 0, 3);
+  const int num_subscans = std::pow(2, ndiv);
   // Update destagger
-  if (subscan != 1) {
-    ROS_WARN("Divide full scan into %d subscans", subscan);
+  if (num_subscans != 1) {
+    ROS_WARN("Divide full scan into %d subscans", num_subscans);
     // Destagger is disabled if we have more than one subscan
     destagger_ = false;
   }
@@ -266,7 +271,7 @@ void Decoder::InitParams() {
   cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
   model_.ToCameraInfo(*cinfo_msg_);
 
-  const int scan_cols = model_.cols / subscan;
+  const int scan_cols = model_.cols / num_subscans;
   ROS_INFO("Subscan %d x %d", model_.rows, scan_cols);
   Allocate(model_.rows, scan_cols);
 
@@ -540,19 +545,9 @@ void Decoder::DecodeColumn(const uint8_t* const col_buf) {
     // because we can always compute the range image based on xyz
     // https://www.ros.org/reps/rep-0117.html
     auto& pt = cloud_.at(curr_col_, ipx);  // (col, row)
-    pt.label = shift;  // can save 4 bytes if remove this field
-    if (col_valid) {
-      if (raw_range == 0) {
-        // This indicates no return, set to inf
-        pt.x = pt.y = pt.z = kFloatInf;
-      } else if (range <= 0.25) {
-        // TODO (chao): too close to measure, set to NaN for now
-        pt.x = pt.y = pt.z = kFloatNaN;
-      } else {
-        // Cloud (see software manual figure 3.1)
-        model_.ToPoint(pt.getArray3fMap(), range, theta0, ipx);
-      }
-
+    // pt.label = shift;  // can save 4 bytes if remove this field
+    if (col_valid && range > 0.25) {
+      model_.ToPoint(pt.getArray3fMap(), range, theta0, ipx);
       // TODO (chao): these magic numbers might need to be adjusted
       pt.r = std::min<uint16_t>(px.reflectivity / 32, 255);
       pt.g = std::min<uint16_t>(px.signal / 8, 255);

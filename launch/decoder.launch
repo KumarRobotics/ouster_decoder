@@ -9,7 +9,7 @@
     <!-- Gravity at philadelphia from https://www.ngs.noaa.gov/cgi-bin/grav_pdx.prl -->
     <!-- Lat: 39.9526 N, Lon: 75.1652 W, MSL Height: 11.8872, Predicted gravity:  980184 +/- 2 milligals -->
     <arg name="gravity" default="9.80184"/>
-    <!-- Divide one scan to 2^div subscans, div=0,1,2 -->
+    <!-- Divide one scan to 2^div subscans, div=0,1,2,3 -->
     <arg name="ndiv" default="0"/>
     <!-- Destagger will be disabled if ndiv > 0 or subscan > 1.
     It is strongly advised to set destagger to false. 
