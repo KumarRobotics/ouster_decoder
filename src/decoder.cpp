@@ -13,7 +13,7 @@
 
 namespace ouster_decoder {
 
-// We use PointXYZRGB, where RGB stores extra information
+// We use PointXYZRGB to store extra information
 // where (R - Reflectivity, G - siGnal, B - amBient)
 using PointT = pcl::PointXYZRGB;
 using CloudT = pcl::PointCloud<PointT>;
@@ -130,6 +130,7 @@ struct LidarModel {
     return jump;
   }
 
+  /// @brief Update camera info with this model
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
     cinfo.height = rows;
     cinfo.width = cols;
@@ -145,9 +146,11 @@ struct LidarModel {
   }
 };
 
+/// @brief Stores data for a (sub)scan
 struct LidarScan {
-  int icol{0};   // column index
-  int iscan{0};  // scan index
+  int icol{0};            // column index
+  int iscan{0};           // scan index
+  bool destagger{false};  // whether to destagger image
 
   cv::Mat image;
   CloudT cloud;
@@ -195,9 +198,7 @@ struct LidarScan {
     ++icol;
   }
 
-  void DecodeColumn(const uint8_t* const col_buf,
-                    const LidarModel& model,
-                    bool destagger) {
+  void DecodeColumn(const uint8_t* const col_buf, const LidarModel& model) {
     const auto& pf = *model.pf;
     const uint64_t t_ns = pf.col_timestamp(col_buf);
     const uint32_t encoder = pf.col_encoder(col_buf);
@@ -252,8 +253,19 @@ struct LidarScan {
     // Move on to next column
     ++icol;
   }
+
+  /// @brief Update camera info roi data with this scan
+  void ToROI(sensor_msgs::RegionOfInterest& roi) const {
+    // Update camera info roi with curr_scan
+    roi.x_offset = StartingCol();
+    roi.y_offset = 0;
+    roi.width = image.cols;
+    roi.height = image.rows;
+    roi.do_rectify = destagger;
+  }
 };
 
+/// @brief Decoder node
 class Decoder {
  public:
   explicit Decoder(const ros::NodeHandle& pnh);
@@ -309,14 +321,9 @@ class Decoder {
 
   // params
   bool align_{};      // whether to align scan
-  bool destagger_{};  // destagger image
   double gravity_{};  // gravity
 };
 
-// Decoder
-// Calls os_config service to get sensor info.
-// Subscribes to lidar and imu packets and publishes image, camera info, point
-// cloud, imu and static transforms
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
   InitOuster();
   InitParams();
@@ -348,7 +355,7 @@ void Decoder::InitOuster() {
 void Decoder::InitParams() {
   align_ = pnh_.param<bool>("align", false);
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
-  destagger_ = pnh_.param<bool>("destagger", false);
+  scan_.destagger = pnh_.param<bool>("destagger", false);
 
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
   int ndiv = pnh_.param<int>("ndiv", 0);
@@ -358,12 +365,12 @@ void Decoder::InitParams() {
   if (num_subscans != 1) {
     ROS_WARN("Divide full scan into %d subscans", num_subscans);
     // Destagger is disabled if we have more than one subscan
-    destagger_ = false;
+    scan_.destagger = false;
   }
 
   ROS_INFO("Align: %s", align_ ? "true" : "false");
   ROS_INFO("Gravity: %f", gravity_);
-  ROS_INFO("Destagger: %s", destagger_ ? "true" : "false");
+  ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
 
   // Make sure cols is divisible by num_subscans
   if (model_.cols % num_subscans != 0) {
@@ -429,12 +436,8 @@ void Decoder::PublishAndReset() {
   auto image_msg =
       cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
   cinfo_msg_->header = header;
-  // Update camera info roi with curr_scan
-  cinfo_msg_->roi.x_offset = scan_.iscan * scan_.image.cols;
-  cinfo_msg_->roi.y_offset = 0;
-  cinfo_msg_->roi.width = scan_.image.cols;
-  cinfo_msg_->roi.height = scan_.image.rows;
-  cinfo_msg_->roi.do_rectify = destagger_;
+  // Update camera info roi with scan
+  scan_.ToROI(cinfo_msg_->roi);
   camera_pub_.publish(image_msg, cinfo_msg_);
 
   // Publish range image on demand
@@ -455,9 +458,9 @@ void Decoder::PublishAndReset() {
   //  ROS_DEBUG("After reset, icol: %d, iscan: %d", scan_.icol, scan_.iscan);
 }
 
-void Decoder::Timing(const ros::Time& start) const {
+void Decoder::Timing(const ros::Time& t_start) const {
   const auto t_end = ros::Time::now();
-  const auto t_proc = (t_end - start).toSec();
+  const auto t_proc = (t_end - t_start).toSec();
   const auto ratio = t_proc / model_.dt_packet;
   if (ratio > 5) {
     ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
@@ -484,7 +487,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
   const auto& pf = *model_.pf;
 
   for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
-    // Get all the relevant data
+    // Get column buffer
     const uint8_t* col_buf = pf.nth_col(icol, packet_buf);
     const auto fid = static_cast<int>(pf.col_frame_id(col_buf));
     const auto mid = static_cast<int>(pf.col_measurement_id(col_buf));
@@ -495,7 +498,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       continue;
     }
 
-    // The invariant here is that scan.icol will always point at the current
+    // The invariant here is that scan_.icol will always point at the current
     // column to be filled at the beginning of the loop
 
     // Sometimes the lidar packet will jump forward by a large chunk, we handle
@@ -503,7 +506,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     const auto jump = model_.DetectJump(fid, mid);
     if (jump == 0) {
       // Data arrived as expected, decode and forward
-      scan_.DecodeColumn(col_buf, model_, destagger_);
+      scan_.DecodeColumn(col_buf, model_);
     } else if (jump > 0) {
       // Detect a jump, we need to forward scan icol by the same amount as jump
       // We could directly increment icol and publish if necessary, but
