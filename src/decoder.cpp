@@ -114,7 +114,7 @@ struct LidarModel {
   ///    |  /
   ///    | /
   ///    |/ theta
-  ///    o -------> x  (connecter)
+  ///    o -------> x  (connector)
   ///
   [[nodiscard]] auto ToPoint(float range, float theta_enc, int row) const
       -> std::array<float, 3> {
