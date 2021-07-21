@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/image_encodings.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 
 #include "ouster_ros/OSConfigSrv.h"
@@ -50,14 +51,25 @@ namespace os = ouster_ros::sensor;
 struct LidarData {
   float range{};            // range in meter
   float theta{};            // azimuth angle
-  uint16_t shift{};         // pixel shift
   uint16_t reflectivity{};  // calibrated reflectivity [R]
   uint16_t signal{};        // signal intensity photon [G]
   uint16_t ambient{};       // NIR photons [B]
+  uint16_t shift{};         // pixel shift
 } __attribute__((packed));
 
 static_assert(sizeof(LidarData) == sizeof(float) * 4,
               "Size of LidarData must be 4 floats (16 bytes)");
+
+/// @brief image data in scan
+struct ImageData {
+  float x{};
+  float y{};
+  float z{};
+  float r{};
+} __attribute__((packed));
+
+static_assert(sizeof(ImageData) == sizeof(float) * 4,
+              "Size of ImageData must be 4 floats (16 bytes)");
 
 /// @brief Stores SensorInfo from ouster with some other useful data
 struct LidarModel {
@@ -90,23 +102,33 @@ struct LidarModel {
   os::sensor_info info;           // sensor info
   os::packet_format const* pf{nullptr};  // packet format
 
-  const auto& pixel_shifts() const { return info.format.pixel_shift_by_row; }
+  const auto& pixel_shifts() const noexcept {
+    return info.format.pixel_shift_by_row;
+  }
 
   /// @brief Convert lidar range data to xyz
   /// @details see software manual 3.1.2 Lidar Range to XYZ
-  void ToPoint(Eigen::Ref<Eigen::Array3f> pt,
-               float range,
-               float theta_enc,
-               int row) const {
+  ///
+  ///    y    r
+  ///    ^   /-> rotate clockwise
+  ///    |  /
+  ///    | /
+  ///    |/ theta
+  ///    o -------> x  (connecter)
+  ///
+  std::array<float, 3> ToPoint(float range, float theta_enc, int row) const {
     const float n = beam_offset;
     const float d = range - n;
     const float phi = altitudes.at(row);
     const float cos_phi = std::cos(phi);
-    const float theta = theta_enc - azimuths.at(row);
+    const float theta = theta_enc - static_cast<float>(azimuths.at(row));
 
-    pt.x() = d * std::cos(theta) * cos_phi + n * std::cos(theta_enc);
-    pt.y() = d * std::sin(theta) * cos_phi + n * std::sin(theta_enc);
-    pt.z() = d * std::sin(phi);
+    std::array<float, 3> xyz;
+
+    xyz[0] = d * std::cos(theta) * cos_phi + n * std::cos(theta_enc);
+    xyz[1] = d * std::sin(theta) * cos_phi + n * std::sin(theta_enc);
+    xyz[2] = d * std::sin(phi);
+    return xyz;
   }
 
   /// @brief Return a unique id for a measurement
@@ -114,7 +136,7 @@ struct LidarModel {
 
   /// @brief Detect if there is a jump in the lidar data
   /// @return 0 - no jump, >0 - jump forward in time, <0 - jump backward in time
-  int DetectJump(int fid, int mid) const {
+  int DetectJump(int fid, int mid) const noexcept {
     static int prev_mid = -1;
     static int prev_fid = -1;
     int jump = 0;
@@ -157,10 +179,10 @@ struct LidarScan {
   std::vector<uint64_t> times;  // all time stamps in (nanosecond)
 
   /// @brief whether this scan is full
-  bool IsFull() const noexcept { return icol >= image.cols; }
+  [[nodiscard]] bool IsFull() const noexcept { return icol >= image.cols; }
 
   /// @brief Starting column of this scan
-  int StartingCol() const noexcept { return iscan * image.cols; }
+  [[nodiscard]] int StartingCol() const noexcept { return iscan * image.cols; }
 
   /// @brief Allocate storage for the scan
   void Allocate(int rows, int cols) {
@@ -170,7 +192,7 @@ struct LidarScan {
   }
 
   /// @brief Reset the scan
-  void Reset(int full_col) {
+  void Reset(int full_col) noexcept {
     // Reset col (usually to 0 but in the rare case that data jumps forward
     // it will be non-zero)
     icol = icol % image.cols;
@@ -183,9 +205,14 @@ struct LidarScan {
 
   /// @brief Invalidate an entire column
   void InvalidateColumn(double dt_col) {
-    for (int ipx = 0; ipx < cloud.height; ++ipx) {
-      auto& pt = cloud.at(icol, ipx);
+    for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
+      auto& pt = cloud.at(icol, irow);
       pt.x = pt.y = pt.z = kFloatNaN;
+    }
+
+    for (int irow = 0; irow < image.rows; ++irow) {
+      auto& px = image.at<cv::Vec4f>(irow, icol);
+      px[0] = px[1] = px[2] = px[3] = kFloatNaN;
     }
 
     // It is possible that the jump spans two subscans, this will cause the
@@ -207,47 +234,31 @@ struct LidarScan {
 
     // Compute azimuth angle theta0, this should always be valid
     // const auto theta_enc = kTau - mid * model_.d_azimuth;
-    const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
-    // TODO (chao): if we have missing packets then the first time stamp could
-    // be wrong
+    const float theta_enc =
+        static_cast<float>(kTau) * (1.0f - encoder / 90112.0f);
     times.at(icol) = t_ns;
 
     for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
-      const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
+      const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
       const uint32_t raw_range = pf.px_range(px_buf);
       const float range = raw_range * kMmToM;
-      const float theta = theta_enc - model.azimuths[ipx];
+      //      const auto shift = model.pixel_shifts()[ipx];
 
-      // im_col is where the pixel should go in the image
-      // its the same as curr_col when we are in staggered mode
-      const auto shift = model.pixel_shifts()[ipx];
-      const int im_col = destagger ? (icol + shift) % image.cols : icol;
-
-      auto& px = image.at<LidarData>(ipx, im_col);
-      px.range = col_valid ? range : kFloatNaN;      // 32
-      px.theta = theta;                              // 32
-      px.shift = shift;                              // 16
-      px.reflectivity = pf.px_reflectivity(px_buf);  // 16
-      px.signal = pf.px_signal(px_buf);              // 16
-      px.ambient = pf.px_ambient(px_buf);            // 16
-
-      // For point cloud we always publish staggered
-      // all points in one column have the same time stamp
-      // because we can always compute the range image based on xyz
-      // https://www.ros.org/reps/rep-0117.html
-      auto& pt = cloud.at(icol, ipx);  // (col, row)
-      // pt.label = shift;  // can save 4 bytes if remove this field
-      if (col_valid && range > 0.25) {
-        model.ToPoint(pt.getArray3fMap(), range, theta_enc, ipx);
-        // TODO (chao): these magic numbers might need to be adjusted
-        pt.r = std::min<uint16_t>(px.reflectivity / 32, 255);
-        pt.g = std::min<uint16_t>(px.signal / 8, 255);
-        pt.b = std::min<uint16_t>(px.ambient, 255);
-        pt.a = 255;
+      auto& px = image.at<ImageData>(ipx, icol);
+      auto& pt = cloud.at(icol, ipx);
+      if (col_valid && range > 0.25f) {
+        const auto xyz = model.ToPoint(range, theta_enc, ipx);
+        pt.x = px.x = xyz[0];
+        pt.y = px.y = xyz[1];
+        pt.z = px.z = xyz[2];
+        px.r = std::hypot(px.x, px.y, px.z);
       } else {
-        // Invalid data, set to NaN
+        px.x = px.y = px.z = kFloatNaN;
         pt.x = pt.y = pt.z = kFloatNaN;
       }
+      pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
+      pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 3, 255);
+      pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
     }
 
     // Move on to next column
@@ -255,7 +266,7 @@ struct LidarScan {
   }
 
   /// @brief Update camera info roi data with this scan
-  void ToROI(sensor_msgs::RegionOfInterest& roi) const {
+  void ToROI(sensor_msgs::RegionOfInterest& roi) const noexcept {
     // Update camera info roi with curr_scan
     roi.x_offset = StartingCol();
     roi.y_offset = 0;
@@ -295,7 +306,7 @@ class Decoder {
   /// Decode lidar packet
   void DecodeLidar(const uint8_t* const packet_buf);
   /// Decode imu packet
-  auto DecodeImu(const uint8_t* const packet_buf) -> sensor_msgs::Imu;
+  auto DecodeImu(const uint8_t* const packet_buf) const -> sensor_msgs::Imu;
 
   /// Publish messages
   void PublishAndReset();
@@ -355,7 +366,7 @@ void Decoder::InitOuster() {
 void Decoder::InitParams() {
   align_ = pnh_.param<bool>("align", false);
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
-  scan_.destagger = pnh_.param<bool>("destagger", false);
+  //  scan_.destagger = pnh_.param<bool>("destagger", false);
 
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
   int ndiv = pnh_.param<int>("ndiv", 0);
@@ -428,7 +439,7 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
 void Decoder::PublishAndReset() {
   std_msgs::Header header;
   header.frame_id = lidar_frame_;
-  header.stamp.fromNSec(scan_.times.front());
+  header.stamp.fromNSec(scan_.times.front());  // use time of the first column
 
   // Publish image and camera_info
   // cinfo stores information about the full sweep, while roi stores information
@@ -443,7 +454,7 @@ void Decoder::PublishAndReset() {
   // Publish range image on demand
   if (range_pub_.getNumSubscribers() > 0) {
     cv::Mat range;
-    cv::extractChannel(scan_.image, range, 0);
+    cv::extractChannel(scan_.image, range, 3);
     range_pub_.publish(cv_bridge::CvImage(header, "32FC1", range).toImageMsg());
   }
 
@@ -488,7 +499,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
 
   for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
     // Get column buffer
-    const uint8_t* col_buf = pf.nth_col(icol, packet_buf);
+    const uint8_t* const col_buf = pf.nth_col(icol, packet_buf);
     const auto fid = static_cast<int>(pf.col_frame_id(col_buf));
     const auto mid = static_cast<int>(pf.col_measurement_id(col_buf));
 
@@ -540,7 +551,7 @@ void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
   imu_pub_.publish(DecodeImu(imu_msg.buf.data()));
 }
 
-auto Decoder::DecodeImu(const uint8_t* const buf) -> sensor_msgs::Imu {
+auto Decoder::DecodeImu(const uint8_t* const buf) const -> sensor_msgs::Imu {
   const auto& pf = *model_.pf;
 
   sensor_msgs::Imu m;
@@ -552,9 +563,9 @@ auto Decoder::DecodeImu(const uint8_t* const buf) -> sensor_msgs::Imu {
   m.orientation.z = 0;
   m.orientation.w = 0;
 
-  m.linear_acceleration.x = pf.imu_la_x(buf) * gravity_;
-  m.linear_acceleration.y = pf.imu_la_y(buf) * gravity_;
-  m.linear_acceleration.z = pf.imu_la_z(buf) * gravity_;
+  m.linear_acceleration.x = static_cast<double>(pf.imu_la_x(buf)) * gravity_;
+  m.linear_acceleration.y = static_cast<double>(pf.imu_la_y(buf)) * gravity_;
+  m.linear_acceleration.z = static_cast<double>(pf.imu_la_z(buf)) * gravity_;
 
   m.angular_velocity.x = Deg2Rad(pf.imu_av_x(buf));
   m.angular_velocity.y = Deg2Rad(pf.imu_av_y(buf));
