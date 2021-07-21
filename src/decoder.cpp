@@ -15,15 +15,15 @@
 namespace ouster_decoder {
 
 // We use PointXYZRGB to store extra information
-// where (R - Reflectivity, G - siGnal, B - amBient)
+// where (R - Reflectivity, G - signal, B - ambient)
 using PointT = pcl::PointXYZRGB;
 using CloudT = pcl::PointCloud<PointT>;
 
 namespace {
 
 constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
+constexpr double kMmToM = 0.001;
 constexpr double kTau = 2 * M_PI;
-constexpr double kMmToM = 0.001f;
 constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
 
 constexpr double Deg2Rad(double deg) { return deg * kTau / 360.0; }
@@ -102,7 +102,7 @@ struct LidarModel {
   os::sensor_info info;           // sensor info
   os::packet_format const* pf{nullptr};  // packet format
 
-  const auto& pixel_shifts() const noexcept {
+  [[nodiscard]] const auto& pixel_shifts() const noexcept {
     return info.format.pixel_shift_by_row;
   }
 
@@ -116,15 +116,15 @@ struct LidarModel {
   ///    |/ theta
   ///    o -------> x  (connecter)
   ///
-  std::array<float, 3> ToPoint(float range, float theta_enc, int row) const {
+  [[nodiscard]] auto ToPoint(float range, float theta_enc, int row) const
+      -> std::array<float, 3> {
     const float n = beam_offset;
     const float d = range - n;
     const float phi = altitudes.at(row);
     const float cos_phi = std::cos(phi);
-    const float theta = theta_enc - static_cast<float>(azimuths.at(row));
+    const float theta = theta_enc - azimuths.at(row);
 
     std::array<float, 3> xyz;
-
     xyz[0] = d * std::cos(theta) * cos_phi + n * std::cos(theta_enc);
     xyz[1] = d * std::sin(theta) * cos_phi + n * std::sin(theta_enc);
     xyz[2] = d * std::sin(phi);
@@ -132,11 +132,13 @@ struct LidarModel {
   }
 
   /// @brief Return a unique id for a measurement
-  int Uid(int fid, int mid) const noexcept { return fid * cols + mid; }
+  [[nodiscard]] int Uid(int fid, int mid) const noexcept {
+    return fid * cols + mid;
+  }
 
   /// @brief Detect if there is a jump in the lidar data
   /// @return 0 - no jump, >0 - jump forward in time, <0 - jump backward in time
-  int DetectJump(int fid, int mid) const noexcept {
+  [[nodiscard]] int DetectJump(int fid, int mid) const noexcept {
     static int prev_mid = -1;
     static int prev_fid = -1;
     int jump = 0;
@@ -234,8 +236,7 @@ struct LidarScan {
 
     // Compute azimuth angle theta0, this should always be valid
     // const auto theta_enc = kTau - mid * model_.d_azimuth;
-    const float theta_enc =
-        static_cast<float>(kTau) * (1.0f - encoder / 90112.0f);
+    const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
     times.at(icol) = t_ns;
 
     for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
@@ -500,8 +501,8 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
   for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
     // Get column buffer
     const uint8_t* const col_buf = pf.nth_col(icol, packet_buf);
-    const auto fid = static_cast<int>(pf.col_frame_id(col_buf));
-    const auto mid = static_cast<int>(pf.col_measurement_id(col_buf));
+    const int fid = pf.col_frame_id(col_buf);
+    const int mid = pf.col_measurement_id(col_buf);
 
     // If we set the align param to true then this will wait for mid = 0 to
     // start a scan
@@ -563,9 +564,9 @@ auto Decoder::DecodeImu(const uint8_t* const buf) const -> sensor_msgs::Imu {
   m.orientation.z = 0;
   m.orientation.w = 0;
 
-  m.linear_acceleration.x = static_cast<double>(pf.imu_la_x(buf)) * gravity_;
-  m.linear_acceleration.y = static_cast<double>(pf.imu_la_y(buf)) * gravity_;
-  m.linear_acceleration.z = static_cast<double>(pf.imu_la_z(buf)) * gravity_;
+  m.linear_acceleration.x = pf.imu_la_x(buf) * gravity_;
+  m.linear_acceleration.y = pf.imu_la_y(buf) * gravity_;
+  m.linear_acceleration.z = pf.imu_la_z(buf) * gravity_;
 
   m.angular_velocity.x = Deg2Rad(pf.imu_av_x(buf));
   m.angular_velocity.y = Deg2Rad(pf.imu_av_y(buf));
