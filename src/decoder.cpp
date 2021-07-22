@@ -102,11 +102,6 @@ struct LidarModel {
   os::sensor_info info;           // sensor info
   os::packet_format const* pf{nullptr};  // packet format
 
-  mutable int prev_fid{-1};
-  mutable int prev_mid{-1};
-
-  void ResetPrevFmid() const noexcept { prev_fid = prev_mid = -1; }
-
   [[nodiscard]] const auto& pixel_shifts() const noexcept {
     return info.format.pixel_shift_by_row;
   }
@@ -343,8 +338,8 @@ class Decoder {
   sensor_msgs::CameraInfoPtr cinfo_msg_;
 
   // params
-  double gravity_{};    // gravity
-  bool strict_{false};  // strict mode will shutdown if data jumps backwards
+  double gravity_{};       // gravity
+  bool strict_{false};     // strict mode will shutdown if data jumps backwards
   bool need_align_{true};  // whether to align scan
 };
 
