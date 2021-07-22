@@ -102,6 +102,11 @@ struct LidarModel {
   os::sensor_info info;           // sensor info
   os::packet_format const* pf{nullptr};  // packet format
 
+  mutable int prev_fid{-1};
+  mutable int prev_mid{-1};
+
+  void ResetPrevFmid() const noexcept { prev_fid = prev_mid = -1; }
+
   [[nodiscard]] const auto& pixel_shifts() const noexcept {
     return info.format.pixel_shift_by_row;
   }
@@ -136,24 +141,6 @@ struct LidarModel {
     return fid * cols + mid;
   }
 
-  /// @brief Detect if there is a jump in the lidar data
-  /// @return 0 - no jump, >0 - jump forward in time, <0 - jump backward in time
-  [[nodiscard]] int DetectJump(int fid, int mid) const noexcept {
-    static int prev_mid = -1;
-    static int prev_fid = -1;
-    int jump = 0;
-
-    if (prev_mid >= 0 && prev_fid >= 0) {
-      // Compute uid of the current and previous measurement
-      // Ideally the jump should be 0
-      jump = Uid(fid, mid) - Uid(prev_fid, prev_mid) - 1;
-    }
-
-    prev_mid = mid;
-    prev_fid = fid;
-    return jump;
-  }
-
   /// @brief Update camera info with this model
   void ToCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
     cinfo.height = rows;
@@ -172,19 +159,22 @@ struct LidarModel {
 
 /// @brief Stores data for a (sub)scan
 struct LidarScan {
-  int icol{0};            // column index
-  int iscan{0};           // scan index
-  bool destagger{false};  // whether to destagger image
+  int icol{0};   // column index
+  int iscan{0};  // scan index
+  int prev_uid{-1};
 
   cv::Mat image;
   CloudT cloud;
   std::vector<uint64_t> times;  // all time stamps in (nanosecond)
 
+  [[nodiscard]] int rows() const noexcept { return image.rows; }
+  [[nodiscard]] int cols() const noexcept { return image.cols; }
+
   /// @brief whether this scan is full
-  [[nodiscard]] bool IsFull() const noexcept { return icol >= image.cols; }
+  [[nodiscard]] bool IsFull() const noexcept { return icol >= cols(); }
 
   /// @brief Starting column of this scan
-  [[nodiscard]] int StartingCol() const noexcept { return iscan * image.cols; }
+  [[nodiscard]] int StartingCol() const noexcept { return iscan * cols(); }
 
   /// @brief Allocate storage for the scan
   void Allocate(int rows, int cols) {
@@ -193,8 +183,29 @@ struct LidarScan {
     times.resize(cols, 0);
   }
 
-  /// @brief Reset the scan
-  void Reset(int full_col) noexcept {
+  /// @brief Detect if there is a jump in the lidar data
+  /// @return 0 - no jump, >0 - jump forward in time, <0 - jump backward in time
+  [[nodiscard]] int DetectJump(int uid) noexcept {
+    int jump = 0;
+
+    if (prev_uid >= 0) {
+      // Ideally the jump should be 0
+      jump = uid - prev_uid - 1;
+    }
+
+    prev_uid = uid;
+    return jump;
+  }
+
+  /// @brief Hard reset internal counters and prev_uid
+  void HardReset() noexcept {
+    icol = 0;
+    iscan = 0;
+    prev_uid = -1;
+  }
+
+  /// @brief Try to reset the internal counters if it is full
+  void SoftReset(int full_col) noexcept {
     // Reset col (usually to 0 but in the rare case that data jumps forward
     // it will be non-zero)
     icol = icol % image.cols;
@@ -273,7 +284,7 @@ struct LidarScan {
     roi.y_offset = 0;
     roi.width = image.cols;
     roi.height = image.rows;
-    roi.do_rectify = destagger;
+    roi.do_rectify = false;
   }
 };
 
@@ -332,8 +343,9 @@ class Decoder {
   sensor_msgs::CameraInfoPtr cinfo_msg_;
 
   // params
-  bool align_{};      // whether to align scan
-  double gravity_{};  // gravity
+  double gravity_{};    // gravity
+  bool strict_{false};  // strict mode will shutdown if data jumps backwards
+  bool need_align_{true};  // whether to align scan
 };
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
@@ -365,8 +377,11 @@ void Decoder::InitOuster() {
 }
 
 void Decoder::InitParams() {
-  align_ = pnh_.param<bool>("align", false);
+  strict_ = pnh_.param<bool>("strict", false);
+  ROS_INFO("Strict: %s", strict_ ? "true" : "false");
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
+  ROS_INFO("Gravity: %f", gravity_);
+  //  align_ = pnh_.param<bool>("align", false);
   //  scan_.destagger = pnh_.param<bool>("destagger", false);
 
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
@@ -374,15 +389,14 @@ void Decoder::InitParams() {
   ndiv = Clamp(ndiv, 0, 3);
   const int num_subscans = std::pow(2, ndiv);
   // Update destagger
-  if (num_subscans != 1) {
-    ROS_WARN("Divide full scan into %d subscans", num_subscans);
-    // Destagger is disabled if we have more than one subscan
-    scan_.destagger = false;
-  }
+  //   if (num_subscans != 1) {
+  //     ROS_WARN("Divide full scan into %d subscans", num_subscans);
+  //     // Destagger is disabled if we have more than one subscan
+  //     scan_.destagger = false;
+  //   }
 
-  ROS_INFO("Align: %s", align_ ? "true" : "false");
-  ROS_INFO("Gravity: %f", gravity_);
-  ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
+  //   ROS_INFO("Align: %s", align_ ? "true" : "false");
+  //   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
 
   // Make sure cols is divisible by num_subscans
   if (model_.cols % num_subscans != 0) {
@@ -401,12 +415,12 @@ void Decoder::InitRos() {
   lidar_sub_ =
       pnh_.subscribe("lidar_packets", 64, &Decoder::LidarPacketCb, this);
   imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
-  ROS_INFO_STREAM("Subscribing lidar from: " << lidar_sub_.getTopic());
-  ROS_INFO_STREAM("Subscribing imu from: " << imu_sub_.getTopic());
+  ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
+  ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
 
   // Publishers
   cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
-  camera_pub_ = it_.advertiseCamera("image", 5);
+  camera_pub_ = it_.advertiseCamera("image", 10);
   imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
   range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
 
@@ -424,17 +438,6 @@ void Decoder::SendTransform() {
       model_.info.imu_to_sensor_transform, sensor_frame_, imu_frame_));
   static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
       model_.info.lidar_to_sensor_transform, sensor_frame_, lidar_frame_));
-}
-
-void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
-  const auto t0 = ros::Time::now();
-  DecodeLidar(lidar_msg.buf.data());
-
-  // We have data for the entire range image
-  if (scan_.IsFull()) {
-    PublishAndReset();
-    Timing(t0);
-  }
 }
 
 void Decoder::PublishAndReset() {
@@ -466,7 +469,7 @@ void Decoder::PublishAndReset() {
   // Increment subscan counter
   ++scan_.iscan;
   // Reset cached data after publish
-  scan_.Reset(model_.cols);
+  scan_.SoftReset(model_.cols);
   //  ROS_DEBUG("After reset, icol: %d, iscan: %d", scan_.icol, scan_.iscan);
 }
 
@@ -488,11 +491,24 @@ void Decoder::Timing(const ros::Time& t_start) const {
 }
 
 bool Decoder::CheckAlign(int mid) {
-  if (align_ && mid == 0) {
-    align_ = false;
-    ROS_DEBUG("Align start of the first subscan to mid 0");
+  if (need_align_ && mid == 0) {
+    need_align_ = false;
+    ROS_DEBUG("Align start of the first subscan to mid %d, icol in scan %d",
+              mid,
+              scan_.icol);
   }
-  return align_;
+  return need_align_;
+}
+
+void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
+  const auto t0 = ros::Time::now();
+  DecodeLidar(lidar_msg.buf.data());
+
+  // We have data for the entire range image
+  if (scan_.IsFull()) {
+    PublishAndReset();
+    Timing(t0);
+  }
 }
 
 void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
@@ -515,7 +531,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
 
     // Sometimes the lidar packet will jump forward by a large chunk, we handle
     // this case here
-    const auto jump = model_.DetectJump(fid, mid);
+    const auto jump = scan_.DetectJump(model_.Uid(fid, mid));
     if (jump == 0) {
       // Data arrived as expected, decode and forward
       scan_.DecodeColumn(col_buf, model_);
@@ -536,13 +552,16 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
         }
       }
     } else {
-      ROS_FATAL(
-          "Packet jumped to f%d:m%d by %d columns, which is "
-          "backwards in time, shutting down.",
-          fid,
-          mid,
-          jump);
-      ros::shutdown();
+      ROS_ERROR("Packet jumped to f%d:m%d by %d columns, which is backwards.",
+                fid,
+                mid,
+                jump);
+      if (strict_) {
+        ros::shutdown();
+      } else {
+        need_align_ = true;
+        scan_.HardReset();
+      }
       return;
     }
   }
