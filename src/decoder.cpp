@@ -447,6 +447,8 @@ void Decoder::PublishAndReset() {
       cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
   cinfo_msg_->header = header;
   // Update camera info roi with scan
+  cinfo_msg_->binning_x = scan_.iscan;
+  cinfo_msg_->binning_y = model_.cols / scan_.cols();
   scan_.ToROI(cinfo_msg_->roi);
   camera_pub_.publish(image_msg, cinfo_msg_);
 

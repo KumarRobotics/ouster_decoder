@@ -7,6 +7,7 @@ launch/debug.conf
 launch/decoder.launch
 launch/driver.launch
 package.xml
+src/bench.cpp
 src/decoder.cpp
 src/decoder.h
 .clang-format
@@ -14,6 +15,7 @@ src/decoder.h
 src/decoder.cpp
 src/decoder.h
 src/driver.cpp
+src/example.cpp
 src/model.cpp
 src/model_test.cpp
 src/utils.h
