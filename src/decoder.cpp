@@ -260,7 +260,7 @@ struct LidarScan {
         pt.z = px.z = xyz[2];
         px.r = std::hypot(px.x, px.y, px.z);
       } else {
-        px.x = px.y = px.z = kFloatNaN;
+        px.x = px.y = px.z = px.r = kFloatNaN;
         pt.x = pt.y = pt.z = kFloatNaN;
       }
       pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
