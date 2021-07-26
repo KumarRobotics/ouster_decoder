@@ -157,6 +157,7 @@ struct LidarScan {
   int icol{0};   // column index
   int iscan{0};  // scan index
   int prev_uid{-1};
+  bool destagger{false};
 
   cv::Mat image;
   CloudT cloud;
@@ -184,7 +185,7 @@ struct LidarScan {
     int jump = 0;
 
     if (prev_uid >= 0) {
-      // Ideally the jump should be 0
+      // Ideally the increment should be 1 hence the jump should be 0
       jump = uid - prev_uid - 1;
     }
 
@@ -249,9 +250,13 @@ struct LidarScan {
       const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
       const uint32_t raw_range = pf.px_range(px_buf);
       const float range = raw_range * kMmToM;
-      //      const auto shift = model.pixel_shifts()[ipx];
 
-      auto& px = image.at<ImageData>(ipx, icol);
+      // im_col is where the pixel should go in the image
+      // it is the same as icol when we are not in staggered mode
+      const int im_col =
+          destagger ? (icol + model.pixel_shifts()[ipx]) % cols() : icol;
+
+      auto& px = image.at<ImageData>(ipx, im_col);
       auto& pt = cloud.at(icol, ipx);
       if (col_valid && range > 0.25f) {
         const auto xyz = model.ToPoint(range, theta_enc, ipx);
@@ -309,7 +314,7 @@ class Decoder {
   void SendTransform();
 
   /// Whether we are still waiting for alignment to mid 0
-  bool CheckAlign(int mid);
+  [[nodiscard]] bool CheckAlign(int mid);
   /// Decode lidar packet
   void DecodeLidar(const uint8_t* const packet_buf);
   /// Decode imu packet
@@ -376,22 +381,20 @@ void Decoder::InitParams() {
   ROS_INFO("Strict: %s", strict_ ? "true" : "false");
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   ROS_INFO("Gravity: %f", gravity_);
-  //  align_ = pnh_.param<bool>("align", false);
-  //  scan_.destagger = pnh_.param<bool>("destagger", false);
+  scan_.destagger = pnh_.param<bool>("destagger", false);
 
   // Div can only be 0,1,2, which means Subscan can only be 1,2,4
   int ndiv = pnh_.param<int>("ndiv", 0);
   ndiv = Clamp(ndiv, 0, 3);
   const int num_subscans = std::pow(2, ndiv);
   // Update destagger
-  //   if (num_subscans != 1) {
-  //     ROS_WARN("Divide full scan into %d subscans", num_subscans);
-  //     // Destagger is disabled if we have more than one subscan
-  //     scan_.destagger = false;
-  //   }
+  if (num_subscans != 1) {
+    ROS_WARN("Divide full scan into %d subscans", num_subscans);
+    // Destagger is disabled if we have more than one subscan
+    scan_.destagger = false;
+  }
 
-  //   ROS_INFO("Align: %s", align_ ? "true" : "false");
-  //   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
+  ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
 
   // Make sure cols is divisible by num_subscans
   if (model_.cols % num_subscans != 0) {

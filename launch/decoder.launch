@@ -20,7 +20,7 @@
     Due to the non-central projection model of the outser lidar, destaggering by pixel offset 
     would still produce artifacts in the range image.
     It is recommended to re-compute a range image from the point cloud if needed -->
-    <!-- <arg name="destagger" default="false"/> -->
+    <arg name="destagger" default="false"/>
     <!-- Align each scan to the start (otherwise will start whenever the first packet arrives)
     It is strongly advised to set this to true, otherwise a scan could start at any point in time, 
     which would cause every run to look slightly different from a bag file if start at different tim -->
@@ -36,7 +36,7 @@
         <param name="ndiv" type="int" value="$(arg ndiv)"/>
         <param name="strict" type="bool" value="$(arg strict)"/>
         <param name="gravity" type="double" value="$(arg gravity)"/>
-        <!-- <param name="destagger" type="bool" value="$(arg destagger)"/> -->
+        <param name="destagger" type="bool" value="$(arg destagger)"/>
 
         <!-- frames -->
         <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
