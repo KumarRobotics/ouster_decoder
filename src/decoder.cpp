@@ -110,11 +110,11 @@ struct LidarModel {
   /// @details see software manual 3.1.2 Lidar Range to XYZ
   ///
   ///    y    r
-  ///    ^   /-> rotate clockwise
+  ///    ^   / -> rotate clockwise
   ///    |  /
   ///    | /
-  ///    |/ theta
-  ///    o -------> x  (connector)
+  ///    |/  theta
+  ///    o ---------> x  (connector)
   ///
   [[nodiscard]] auto ToPoint(float range, float theta_enc, int row) const
       -> std::array<float, 3> {
@@ -137,7 +137,7 @@ struct LidarModel {
   }
 
   /// @brief Update camera info with this model
-  void ToCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
+  void UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
     cinfo.height = rows;
     cinfo.width = cols;
     cinfo.distortion_model = info.prod_line;
@@ -146,22 +146,22 @@ struct LidarModel {
     cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
     cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
 
-    cinfo.K[0] = dt_col;
-    cinfo.R[0] = d_azimuth;
-    cinfo.P[0] = beam_offset;
+    cinfo.K[0] = dt_col;       // time between each column
+    cinfo.R[0] = d_azimuth;    // radian between each column
+    cinfo.P[0] = beam_offset;  // distance from center to beam
   }
 };
 
 /// @brief Stores data for a (sub)scan
 struct LidarScan {
   int icol{0};   // column index
-  int iscan{0};  // scan index
+  int iscan{0};  // subscan index
   int prev_uid{-1};
   bool destagger{false};
 
   cv::Mat image;
   CloudT cloud;
-  std::vector<uint64_t> times;  // all time stamps in (nanosecond)
+  std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
   [[nodiscard]] int rows() const noexcept { return image.rows; }
   [[nodiscard]] int cols() const noexcept { return image.cols; }
@@ -278,7 +278,7 @@ struct LidarScan {
   }
 
   /// @brief Update camera info roi data with this scan
-  void ToROI(sensor_msgs::RegionOfInterest& roi) const noexcept {
+  void UpdateRoi(sensor_msgs::RegionOfInterest& roi) const noexcept {
     // Update camera info roi with curr_scan
     roi.x_offset = StartingCol();
     roi.y_offset = 0;
@@ -344,7 +344,7 @@ class Decoder {
 
   // params
   double gravity_{};       // gravity
-  bool strict_{false};     // strict mode will shutdown if data jumps backwards
+  bool strict_{false};     // strict mode will die if data jumps backwards
   bool need_align_{true};  // whether to align scan
 };
 
@@ -365,7 +365,7 @@ void Decoder::InitOuster() {
   }
 
   // parse metadata into lidar model
-  model_ = LidarModel(cfg.response.metadata);
+  model_ = LidarModel{cfg.response.metadata};
   ROS_INFO_STREAM("Lidar mode: " << os::to_string(model_.info.mode));
   ROS_INFO("Lidar: %d x %d @ %d hz", model_.rows, model_.cols, model_.freq);
   ROS_INFO("Columns per packet: %d", model_.pf->columns_per_packet);
@@ -373,7 +373,7 @@ void Decoder::InitOuster() {
 
   // Generate partial camera info message
   cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
-  model_.ToCameraInfo(*cinfo_msg_);
+  model_.UpdateCameraInfo(*cinfo_msg_);
 }
 
 void Decoder::InitParams() {
@@ -411,7 +411,7 @@ void Decoder::InitParams() {
 void Decoder::InitRos() {
   // Subscribers
   lidar_sub_ =
-      pnh_.subscribe("lidar_packets", 64, &Decoder::LidarPacketCb, this);
+      pnh_.subscribe("lidar_packets", 100, &Decoder::LidarPacketCb, this);
   imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
   ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
   ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
@@ -446,13 +446,13 @@ void Decoder::PublishAndReset() {
   // Publish image and camera_info
   // cinfo stores information about the full sweep, while roi stores information
   // about the subscan
-  auto image_msg =
+  const auto image_msg =
       cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
   cinfo_msg_->header = header;
   // Update camera info roi with scan
   cinfo_msg_->binning_x = scan_.iscan;
   cinfo_msg_->binning_y = model_.cols / scan_.cols();
-  scan_.ToROI(cinfo_msg_->roi);
+  scan_.UpdateRoi(cinfo_msg_->roi);
   camera_pub_.publish(image_msg, cinfo_msg_);
 
   // Publish range image on demand
