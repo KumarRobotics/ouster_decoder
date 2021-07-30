@@ -14,15 +14,15 @@
 
 namespace ouster_decoder {
 
+namespace os = ouster_ros::sensor;
+
 // We use PointXYZRGB to store extra information
 // where (R - Reflectivity, G - signal, B - ambient)
 using PointT = pcl::PointXYZRGB;
 using CloudT = pcl::PointCloud<PointT>;
 
-namespace {
-
 constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
-constexpr double kMmToM = 0.001;
+constexpr float kMmToM = 0.001;
 constexpr double kTau = 2 * M_PI;
 constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
 
@@ -42,10 +42,6 @@ std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
   }
   return rads;
 }
-
-}  // namespace
-
-namespace os = ouster_ros::sensor;
 
 /// @brief stores decoded lidar data from a packet
 struct LidarData {
@@ -124,10 +120,10 @@ struct LidarModel {
     const float cos_phi = std::cos(phi);
     const float theta = theta_enc - azimuths.at(row);
 
-    std::array<float, 3> xyz;
-    xyz[0] = d * std::cos(theta) * cos_phi + n * std::cos(theta_enc);
-    xyz[1] = d * std::sin(theta) * cos_phi + n * std::sin(theta_enc);
-    xyz[2] = d * std::sin(phi);
+    std::array<float, 3> xyz = {
+        d * std::cos(theta) * cos_phi + n * std::cos(theta_enc),
+        d * std::sin(theta) * cos_phi + n * std::sin(theta_enc),
+        d * std::sin(phi)};
     return xyz;
   }
 
@@ -142,9 +138,11 @@ struct LidarModel {
     cinfo.width = cols;
     cinfo.distortion_model = info.prod_line;
 
-    cinfo.D.reserve(altitudes.size() + azimuths.size());
-    cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
-    cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
+    // cinfo.D.reserve(altitudes.size() + azimuths.size());
+    // cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
+    // cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
+    cinfo.D.reserve(pixel_shifts().size());
+    cinfo.D.insert(cinfo.D.end(), pixel_shifts().begin(), pixel_shifts().end());
 
     cinfo.K[0] = dt_col;       // time between each column
     cinfo.R[0] = d_azimuth;    // radian between each column
@@ -239,7 +237,7 @@ struct LidarScan {
     const uint64_t t_ns = pf.col_timestamp(col_buf);
     const uint32_t encoder = pf.col_encoder(col_buf);
     const uint32_t status = pf.col_status(col_buf);
-    const bool col_valid = (status == 0xffffffff);
+    bool col_valid = (status == 0xffffffff);
 
     // Compute azimuth angle theta0, this should always be valid
     // const auto theta_enc = kTau - mid * model_.d_azimuth;
@@ -248,13 +246,22 @@ struct LidarScan {
 
     for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
       const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
-      const uint32_t raw_range = pf.px_range(px_buf);
+      const auto raw_range = pf.px_range(px_buf);
       const float range = raw_range * kMmToM;
 
       // im_col is where the pixel should go in the image
       // it is the same as icol when we are not in staggered mode
-      const int im_col =
-          destagger ? (icol + model.pixel_shifts()[ipx]) % cols() : icol;
+      int im_col = icol;
+      if (destagger) {
+        // add pixel shift to get where the pixel should be
+        im_col += model.pixel_shifts()[ipx];
+        // if it is outside the current subscan, we set this pixel invalid
+        if (im_col < 0 || im_col >= cols()) {
+          col_valid = false;
+          // make sure index is within bound
+          im_col = im_col % cols();
+        }
+      }
 
       auto& px = image.at<ImageData>(ipx, im_col);
       auto& pt = cloud.at(icol, ipx);
@@ -284,7 +291,7 @@ struct LidarScan {
     roi.y_offset = 0;
     roi.width = image.cols;
     roi.height = image.rows;
-    roi.do_rectify = false;
+    roi.do_rectify = destagger;
   }
 };
 
@@ -382,19 +389,10 @@ void Decoder::InitParams() {
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   ROS_INFO("Gravity: %f", gravity_);
   scan_.destagger = pnh_.param<bool>("destagger", false);
-
-  // Div can only be 0,1,2, which means Subscan can only be 1,2,4
-  int ndiv = pnh_.param<int>("ndiv", 0);
-  ndiv = Clamp(ndiv, 0, 3);
-  const int num_subscans = std::pow(2, ndiv);
-  // Update destagger
-  if (num_subscans != 1) {
-    ROS_WARN("Divide full scan into %d subscans", num_subscans);
-    // Destagger is disabled if we have more than one subscan
-    scan_.destagger = false;
-  }
-
   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
+
+  const int ndiv = pnh_.param<int>("ndiv", 0);
+  const int num_subscans = std::pow(2, ndiv);
 
   // Make sure cols is divisible by num_subscans
   if (model_.cols % num_subscans != 0) {
@@ -520,7 +518,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     const int fid = pf.col_frame_id(col_buf);
     const int mid = pf.col_measurement_id(col_buf);
 
-    // If we set the align param to true then this will wait for mid = 0 to
+    // If we set need_align to true then this will wait for mid = 0 to
     // start a scan
     if (CheckAlign(mid)) {
       continue;
@@ -539,7 +537,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
       // Detect a jump, we need to forward scan icol by the same amount as jump
       // We could directly increment icol and publish if necessary, but
       // this will require us to zero the whole cloud at publish time which is
-      // very time consuming. Therefore, we choose to advance icol one by one
+      // very time-consuming. Therefore, we choose to advance icol one by one
       // and zero out each column in the point cloud
       for (int i = 0; i < jump; ++i) {
         // zero cloud column at current col and then increment
