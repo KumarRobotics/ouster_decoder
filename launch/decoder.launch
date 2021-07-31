@@ -6,16 +6,18 @@
     <arg name="lidar_ns" default="os_node"/>
     <arg name="driver_ns" default="/os_node"/>
 
+    <!-- anything < min_range will be set to nan -->
+    <arg name="min_range" default="0.5"/>
     <!-- Gravity at philadelphia from https://www.ngs.noaa.gov/cgi-bin/grav_pdx.prl -->
     <!-- Lat: 39.9526 N, Lon: 75.1652 W, MSL Height: 11.8872, Predicted gravity:  980184 +/- 2 milligals -->
     <arg name="gravity" default="9.80184"/>
-    <!-- Divide one scan to 2^div subscans, div=0,1,2,3 -->
-    <arg name="ndiv" default="0"/>
+    <!-- Divide one scan to 2^div subscans, div_exp=0,1,2,3 means subscans=1,2,4,8 -->
+    <arg name="div_exp" default="0"/>
     <!-- Strict mode will shutdown if backward jump is detected -->
     <arg name="strict" default="false"/>
 
     <!-- Destagger and align are currently disabled since there's really no point in changing them -->
-    <!-- Destagger will be disabled if ndiv > 0 or subscan > 1.
+    <!-- Destagger will be disabled if div_exp > 0 or subscan > 1.
     It is strongly advised to set destagger to false. 
     Due to the non-central projection model of the outser lidar, destaggering by pixel offset 
     would still produce artifacts in the range image.
@@ -33,10 +35,11 @@
 
     <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder" output="screen" ns="$(arg lidar_ns)">
         <!-- params -->
-        <param name="ndiv" type="int" value="$(arg ndiv)"/>
+        <param name="div_exp" type="int" value="$(arg div_exp)"/>
         <param name="strict" type="bool" value="$(arg strict)"/>
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="destagger" type="bool" value="$(arg destagger)"/>
+        <param name="min_range" type="double" value="$(arg min_range)"/>
 
         <!-- frames -->
         <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>

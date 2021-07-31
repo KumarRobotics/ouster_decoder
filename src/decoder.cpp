@@ -93,10 +93,13 @@ struct LidarModel {
   double dt_packet{};             // delta time between two packets [s]
   double d_azimuth{};             // delta angle between two columns [rad]
   double beam_offset{};           // distance between beam to origin
-  std::vector<double> azimuths;   // azimuths offset angles [rad]
   std::vector<double> altitudes;  // altitude angles, high to low [rad]
+  std::vector<double> azimuths;   // azimuths offset angles [rad]
   os::sensor_info info;           // sensor info
   os::packet_format const* pf{nullptr};  // packet format
+
+  //   std::vector<CosSin> azimuths_cs;
+  //   std::vector<CosSin> altitudes_cs;
 
   [[nodiscard]] const auto& pixel_shifts() const noexcept {
     return info.format.pixel_shift_by_row;
@@ -116,15 +119,13 @@ struct LidarModel {
       -> std::array<float, 3> {
     const float n = beam_offset;
     const float d = range - n;
-    const float phi = altitudes.at(row);
+    const float phi = altitudes[row];
     const float cos_phi = std::cos(phi);
-    const float theta = theta_enc - azimuths.at(row);
+    const float theta = theta_enc - azimuths[row];
 
-    std::array<float, 3> xyz = {
-        d * std::cos(theta) * cos_phi + n * std::cos(theta_enc),
-        d * std::sin(theta) * cos_phi + n * std::sin(theta_enc),
-        d * std::sin(phi)};
-    return xyz;
+    return {d * std::cos(theta) * cos_phi + n * std::cos(theta_enc),
+            d * std::sin(theta) * cos_phi + n * std::sin(theta_enc),
+            d * std::sin(phi)};
   }
 
   /// @brief Return a unique id for a measurement
@@ -155,6 +156,7 @@ struct LidarScan {
   int icol{0};   // column index
   int iscan{0};  // subscan index
   int prev_uid{-1};
+  double min_range{};  // min range to be consider valid
   bool destagger{false};
 
   cv::Mat image;
@@ -265,7 +267,7 @@ struct LidarScan {
 
       auto& px = image.at<ImageData>(ipx, im_col);
       auto& pt = cloud.at(icol, ipx);
-      if (col_valid && range > 0.25f) {
+      if (col_valid && range > min_range) {
         const auto xyz = model.ToPoint(range, theta_enc, ipx);
         pt.x = px.x = xyz[0];
         pt.y = px.y = xyz[1];
@@ -390,9 +392,11 @@ void Decoder::InitParams() {
   ROS_INFO("Gravity: %f", gravity_);
   scan_.destagger = pnh_.param<bool>("destagger", false);
   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
+  scan_.min_range = pnh_.param<double>("min_range", 0.5);
+  ROS_INFO("Min range: %f", scan_.min_range);
 
-  const int ndiv = pnh_.param<int>("ndiv", 0);
-  const int num_subscans = std::pow(2, ndiv);
+  const int div_exp = pnh_.param<int>("div_exp", 0);
+  const int num_subscans = std::pow(2, div_exp);
 
   // Make sure cols is divisible by num_subscans
   if (model_.cols % num_subscans != 0) {
@@ -402,7 +406,7 @@ void Decoder::InitParams() {
   }
 
   const int scan_cols = model_.cols / num_subscans;
-  ROS_INFO("Subscan %d x %d", model_.rows, scan_cols);
+  ROS_INFO("Subscan %d x %d, total %d", model_.rows, scan_cols, num_subscans);
   scan_.Allocate(model_.rows, scan_cols);
 }
 
