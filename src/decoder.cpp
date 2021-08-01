@@ -265,21 +265,29 @@ struct LidarScan {
         }
       }
 
-      auto& px = image.at<ImageData>(ipx, im_col);
+      // Set point
       auto& pt = cloud.at(icol, ipx);
       if (col_valid && range > min_range) {
         const auto xyz = model.ToPoint(range, theta_enc, ipx);
-        pt.x = px.x = xyz[0];
-        pt.y = px.y = xyz[1];
-        pt.z = px.z = xyz[2];
-        px.r = std::hypot(px.x, px.y, px.z);
+        pt.x = xyz[0];
+        pt.y = xyz[1];
+        pt.z = xyz[2];
       } else {
-        px.x = px.y = px.z = px.r = kFloatNaN;
         pt.x = pt.y = pt.z = kFloatNaN;
       }
+
+      // https://github.com/ouster-lidar/ouster_example/issues/128
+      // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
       pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
-      pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 3, 255);
+      pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 2, 255);
       pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
+
+      // Set pixel
+      auto& px = image.at<ImageData>(ipx, im_col);
+      px.x = pt.x;
+      px.y = pt.y;
+      px.z = pt.z;
+      px.r = std::hypot(pt.x, pt.y, pt.z);
     }
 
     // Move on to next column
