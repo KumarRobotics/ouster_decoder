@@ -235,6 +235,11 @@ struct LidarScan {
   }
 
   void DecodeColumn(const uint8_t* const col_buf, const LidarModel& model) {
+    if (icol >= image.cols) {
+      ROS_WARN_STREAM("Decode: " << icol << ">=" << image.cols);
+      return;
+    }
+
     const auto& pf = *model.pf;
     const uint64_t t_ns = pf.col_timestamp(col_buf);
     const uint32_t encoder = pf.col_encoder(col_buf);
@@ -332,10 +337,6 @@ class Decoder {
 
   /// Whether we are still waiting for alignment to mid 0
   [[nodiscard]] bool CheckAlign(int mid);
-  /// Decode lidar packet
-  void DecodeLidar(const uint8_t* const packet_buf);
-  /// Decode imu packet
-  auto DecodeImu(const uint8_t* const packet_buf) const -> sensor_msgs::Imu;
 
   /// Publish messages
   void PublishAndReset();
@@ -512,21 +513,12 @@ bool Decoder::CheckAlign(int mid) {
 
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
   const auto t0 = ros::Time::now();
-  DecodeLidar(lidar_msg.buf.data());
-
-  // We have data for the entire range image
-  if (scan_.IsFull()) {
-    PublishAndReset();
-    Timing(t0);
-  }
-}
-
-void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
+  const auto* packet_buf = lidar_msg.buf.data();
   const auto& pf = *model_.pf;
 
-  for (int icol = 0; icol < pf.columns_per_packet; ++icol) {
+  for (int col = 0; col < pf.columns_per_packet; ++col) {
     // Get column buffer
-    const uint8_t* const col_buf = pf.nth_col(icol, packet_buf);
+    const uint8_t* const col_buf = pf.nth_col(col, packet_buf);
     const int fid = pf.col_frame_id(col_buf);
     const int mid = pf.col_measurement_id(col_buf);
 
@@ -545,7 +537,15 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
     if (jump == 0) {
       // Data arrived as expected, decode and forward
       scan_.DecodeColumn(col_buf, model_);
+      if (scan_.IsFull()) {
+        PublishAndReset();
+        Timing(t0);
+      }
     } else if (jump > 0) {
+      ROS_ERROR("Packet jumped to f%d:m%d by %d columns, which is forward.",
+                fid,
+                mid,
+                jump);
       // Detect a jump, we need to forward scan icol by the same amount as jump
       // We could directly increment icol and publish if necessary, but
       // this will require us to zero the whole cloud at publish time which is
@@ -559,6 +559,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
         if (scan_.IsFull()) {
           ROS_WARN("Jumped into a new scan, need to publish the previous one");
           PublishAndReset();
+          Timing(t0);
         }
       }
     } else {
@@ -578,10 +579,7 @@ void Decoder::DecodeLidar(const uint8_t* const packet_buf) {
 }
 
 void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
-  imu_pub_.publish(DecodeImu(imu_msg.buf.data()));
-}
-
-auto Decoder::DecodeImu(const uint8_t* const buf) const -> sensor_msgs::Imu {
+  const auto* buf = imu_msg.buf.data();
   const auto& pf = *model_.pf;
 
   sensor_msgs::Imu m;
@@ -611,7 +609,7 @@ auto Decoder::DecodeImu(const uint8_t* const buf) const -> sensor_msgs::Imu {
     m.angular_velocity_covariance[i] = 6e-4;
   }
 
-  return m;
+  imu_pub_.publish(m);
 }
 
 }  // namespace ouster_decoder
