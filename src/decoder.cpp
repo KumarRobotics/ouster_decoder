@@ -452,7 +452,7 @@ void Decoder::SendTransform() {
 void Decoder::PublishAndReset() {
   std_msgs::Header header;
   header.frame_id = lidar_frame_;
-  header.stamp.fromNSec(scan_.times.front());  // use time of the first column
+  header.stamp.fromNSec(scan_.times.back());  // use time of the last column
 
   // Publish image and camera_info
   // cinfo stores information about the full sweep, while roi stores information
