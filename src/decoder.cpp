@@ -421,9 +421,16 @@ void Decoder::InitParams() {
 
 void Decoder::InitRos() {
   // Subscribers
-  lidar_sub_ =
-      pnh_.subscribe("lidar_packets", 100, &Decoder::LidarPacketCb, this);
-  imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
+  lidar_sub_ = pnh_.subscribe("lidar_packets",
+                              640,
+                              &Decoder::LidarPacketCb,
+                              this,
+                              ros::TransportHints().tcpNoDelay());
+  imu_sub_ = pnh_.subscribe("imu_packets",
+                            100,
+                            &Decoder::ImuPacketCb,
+                            this,
+                            ros::TransportHints().tcpNoDelay());
   ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
   ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
 
