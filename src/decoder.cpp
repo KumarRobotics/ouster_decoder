@@ -511,9 +511,9 @@ void Decoder::Timing(const ros::Time& t_start) const {
 bool Decoder::CheckAlign(int mid) {
   if (need_align_ && mid == 0) {
     need_align_ = false;
-    ROS_DEBUG("Align start of the first subscan to mid %d, icol in scan %d",
-              mid,
-              scan_.icol);
+    ROS_INFO("Align start of the first subscan to mid %d, icol in scan %d",
+             mid,
+             scan_.icol);
   }
   return need_align_;
 }
@@ -575,8 +575,10 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
                 mid,
                 jump);
       if (strict_) {
+        ROS_ERROR("In strict mode, shutting down...");
         ros::shutdown();
       } else {
+        ROS_WARN("Reset internal state and wait for new starting scan");
         need_align_ = true;
         scan_.HardReset();
       }
