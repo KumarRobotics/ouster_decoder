@@ -41,6 +41,7 @@
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="destagger" type="bool" value="$(arg destagger)"/>
         <param name="min_range" type="double" value="$(arg min_range)"/>
+        <param name="max_range" type="double" value="$(arg max_range)"/>
 
         <!-- frames -->
         <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
