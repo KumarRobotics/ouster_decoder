@@ -156,7 +156,8 @@ struct LidarScan {
   int icol{0};   // column index
   int iscan{0};  // subscan index
   int prev_uid{-1};
-  double min_range{};  // min range to be consider valid
+  double min_range{};
+  double max_range{};
   bool destagger{false};
 
   cv::Mat image;
@@ -272,7 +273,7 @@ struct LidarScan {
 
       // Set point
       auto& pt = cloud.at(icol, ipx);
-      if (col_valid && range > min_range) {
+      if (col_valid && min_range < range && range < max_range) {
         const auto xyz = model.ToPoint(range, theta_enc, ipx);
         pt.x = xyz[0];
         pt.y = xyz[1];
@@ -403,6 +404,8 @@ void Decoder::InitParams() {
   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
   scan_.min_range = pnh_.param<double>("min_range", 0.5);
   ROS_INFO("Min range: %f", scan_.min_range);
+  scan_.max_range = pnh_.param<double>("max_range", 128.0);
+  ROS_INFO("Min range: %f", scan_.max_range);
 
   const int div_exp = pnh_.param<int>("div_exp", 0);
   const int num_subscans = std::pow(2, div_exp);
