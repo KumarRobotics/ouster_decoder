@@ -551,11 +551,8 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
         PublishAndReset();
         Timing(t0);
       }
-    } else if (jump > 0) {
-      ROS_ERROR("Packet jumped to f%d:m%d by %d columns, which is forward.",
-                fid,
-                mid,
-                jump);
+    } else if (0 < jump && jump < model_.cols) {
+      ROS_WARN("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
       // Detect a jump, we need to forward scan icol by the same amount as jump
       // We could directly increment icol and publish if necessary, but
       // this will require us to zero the whole cloud at publish time which is
@@ -573,15 +570,12 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
         }
       }
     } else {
-      ROS_ERROR("Packet jumped to f%d:m%d by %d columns, which is backwards.",
-                fid,
-                mid,
-                jump);
+      ROS_ERROR("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
       if (strict_) {
-        ROS_ERROR("In strict mode, shutting down...");
+        ROS_FATAL("In strict mode, shutting down...");
         ros::shutdown();
       } else {
-        ROS_WARN("Reset internal state and wait for new starting scan");
+        ROS_WARN("Not in strict mode, reset internal state and wait for align");
         need_align_ = true;
         scan_.HardReset();
       }
