@@ -18,7 +18,7 @@ namespace os = ouster_ros::sensor;
 
 // We use PointXYZRGB to store extra information
 // where (R - Reflectivity, G - signal, B - ambient)
-using PointT = pcl::PointXYZRGB;
+using PointT = pcl::PointXYZI;
 using CloudT = pcl::PointCloud<PointT>;
 
 constexpr float kMmToM = 0.001;
@@ -274,9 +274,10 @@ struct LidarScan {
 
       // https://github.com/ouster-lidar/ouster_example/issues/128
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
-      pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
-      pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 2, 255);
-      pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
+      pt.intensity = static_cast<float>(pf.px_signal(px_buf));
+      // pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
+      // pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 2, 255);
+      // pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
 
       // Set pixel
       auto& px = image.at<ImageData>(ipx, im_col);
