@@ -1,15 +1,3 @@
-/**
- * @file
- * @brief Example node to publish raw sensor output on ROS topics
- *
- * ROS Parameters
- * sensor_hostname: hostname or IP in dotted decimal form of the sensor
- * udp_dest: hostname or IP where the sensor will send data packets
- * lidar_port: port to which the sensor should send lidar data
- * imu_port: port to which the sensor should send imu data
- */
-
-#include <ros/console.h>
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 

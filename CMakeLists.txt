@@ -19,13 +19,3 @@ target_link_libraries(ouster_decoder PRIVATE ouster_decoder_base)
 
 add_executable(ouster_driver src/driver.cpp)
 target_link_libraries(ouster_driver PRIVATE ouster_decoder_base)
-
-find_package(benchmark)
-if(benchmark_FOUND)
-  find_package(TBB REQUIRED)
-  find_package(Eigen3 REQUIRED)
-  add_executable(pcl_bench src/bench.cpp)
-  target_link_libraries(
-    pcl_bench PRIVATE ouster_decoder_base TBB::tbb benchmark::benchmark
-                      benchmark::benchmark_main Eigen3::Eigen)
-endif()

@@ -21,17 +21,12 @@ namespace os = ouster_ros::sensor;
 using PointT = pcl::PointXYZRGB;
 using CloudT = pcl::PointCloud<PointT>;
 
-constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
 constexpr float kMmToM = 0.001;
 constexpr double kTau = 2 * M_PI;
 constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
+constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
 
 constexpr double Deg2Rad(double deg) { return deg * kTau / 360.0; }
-
-template <typename T>
-constexpr T Clamp(const T& v, const T& lo, const T& hi) {
-  return std::max(lo, std::min(v, hi));
-}
 
 /// @brief Convert a vector of double from deg to rad
 std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
@@ -98,9 +93,6 @@ struct LidarModel {
   os::sensor_info info;           // sensor info
   os::packet_format const* pf{nullptr};  // packet format
 
-  //   std::vector<CosSin> azimuths_cs;
-  //   std::vector<CosSin> altitudes_cs;
-
   [[nodiscard]] const auto& pixel_shifts() const noexcept {
     return info.format.pixel_shift_by_row;
   }
@@ -115,8 +107,9 @@ struct LidarModel {
   ///    |/  theta
   ///    o ---------> x  (connector)
   ///
-  [[nodiscard]] auto ToPoint(float range, float theta_enc, int row) const
-      -> std::array<float, 3> {
+  [[nodiscard]] Eigen::Vector3f ToPoint(float range,
+                                        float theta_enc,
+                                        int row) const {
     const float n = beam_offset;
     const float d = range - n;
     const float phi = altitudes[row];
@@ -146,8 +139,8 @@ struct LidarModel {
     cinfo.D.insert(cinfo.D.end(), pixel_shifts().begin(), pixel_shifts().end());
 
     cinfo.K[0] = dt_col;       // time between each column
-    cinfo.R[0] = d_azimuth;    // radian between each column
-    cinfo.P[0] = beam_offset;  // distance from center to beam
+    cinfo.K[1] = d_azimuth;    // radian between each column
+    cinfo.K[2] = beam_offset;  // distance from center to beam
   }
 };
 
@@ -274,10 +267,7 @@ struct LidarScan {
       // Set point
       auto& pt = cloud.at(icol, ipx);
       if (col_valid && min_range < range && range < max_range) {
-        const auto xyz = model.ToPoint(range, theta_enc, ipx);
-        pt.x = xyz[0];
-        pt.y = xyz[1];
-        pt.z = xyz[2];
+        pt.getArray3fMap() = model.ToPoint(range, theta_enc, ipx);
       } else {
         pt.x = pt.y = pt.z = kFloatNaN;
       }
@@ -421,17 +411,10 @@ void Decoder::InitParams() {
 }
 
 void Decoder::InitRos() {
-  // Subscribers
-  lidar_sub_ = pnh_.subscribe("lidar_packets",
-                              640,
-                              &Decoder::LidarPacketCb,
-                              this,
-                              ros::TransportHints().tcpNoDelay());
-  imu_sub_ = pnh_.subscribe("imu_packets",
-                            100,
-                            &Decoder::ImuPacketCb,
-                            this,
-                            ros::TransportHints().tcpNoDelay());
+  // Subscribers, queue size is 1 second
+  lidar_sub_ =
+      pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
+  imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
   ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
   ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
 
