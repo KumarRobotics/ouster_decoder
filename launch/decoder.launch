@@ -6,14 +6,14 @@
     <arg name="lidar_ns" default="os_node"/>
     <arg name="driver_ns" default="/os_node"/>
 
-    <!-- anything < min_range will be set to nan -->
+    <!-- anything < min_range or > max_range will be set to nan -->
     <arg name="min_range" default="0.5"/>
     <arg name="max_range" default="128.0"/>
     <!-- Gravity at philadelphia from https://www.ngs.noaa.gov/cgi-bin/grav_pdx.prl -->
     <!-- Lat: 39.9526 N, Lon: 75.1652 W, MSL Height: 11.8872, Predicted gravity:  980184 +/- 2 milligals -->
     <arg name="gravity" default="9.80184"/>
-    <!-- Divide one scan to 2^div subscans, div_exp=0,1,2,3 means subscans=1,2,4,8 -->
-    <arg name="div_exp" default="0"/>
+    <!-- Divide one scan to n subscans, default is 1, can be 2, 4, 8, ... -->
+    <arg name="divide" default="1"/>
     <!-- Strict mode will shutdown if backward jump is detected -->
     <arg name="strict" default="false"/>
 
@@ -36,7 +36,7 @@
 
     <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder" output="screen" ns="$(arg lidar_ns)">
         <!-- params -->
-        <param name="div_exp" type="int" value="$(arg div_exp)"/>
+        <param name="divide" type="int" value="$(arg divide)"/>
         <param name="strict" type="bool" value="$(arg strict)"/>
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="destagger" type="bool" value="$(arg destagger)"/>

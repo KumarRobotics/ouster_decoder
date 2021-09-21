@@ -407,11 +407,9 @@ void Decoder::InitParams() {
   scan_.max_range = pnh_.param<double>("max_range", 128.0);
   ROS_INFO("Min range: %f", scan_.max_range);
 
-  const int div_exp = pnh_.param<int>("div_exp", 0);
-  const int num_subscans = std::pow(2, div_exp);
-
+  int num_subscans = pnh_.param<int>("divide", 1);
   // Make sure cols is divisible by num_subscans
-  if (model_.cols % num_subscans != 0) {
+  if (num_subscans < 1 || model_.cols % num_subscans != 0) {
     throw std::runtime_error("num subscans is not divisible by cols: " +
                              std::to_string(model_.cols) + " / " +
                              std::to_string(num_subscans));
