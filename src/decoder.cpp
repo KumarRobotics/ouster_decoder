@@ -346,9 +346,11 @@ class Decoder {
   sensor_msgs::CameraInfoPtr cinfo_msg_;
 
   // params
-  double gravity_{};       // gravity
-  bool strict_{false};     // strict mode will die if data jumps backwards
-  bool need_align_{true};  // whether to align scan
+  double gravity_{};        // gravity
+  bool strict_{false};      // strict mode will die if data jumps backwards
+  bool need_align_{true};   // whether to align scan
+  double acc_noise_var_{};  // discrete time acc noise variance
+  double gyr_noise_var_{};  // discrete time gyr noise variance
 };
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
@@ -402,6 +404,15 @@ void Decoder::InitParams() {
   const int scan_cols = model_.cols / num_subscans;
   ROS_INFO("Subscan %d x %d, total %d", model_.rows, scan_cols, num_subscans);
   scan_.Allocate(model_.rows, scan_cols);
+
+  acc_noise_var_ = pnh_.param<double>("acc_noise_std", 0.0023);
+  gyr_noise_var_ = pnh_.param<double>("gyr_noise_std", 0.00026);
+  // https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model
+  acc_noise_var_ = std::pow(acc_noise_var_, 2) * 100.0;
+  gyr_noise_var_ = std::pow(gyr_noise_var_, 2) * 100.0;
+  ROS_INFO("Discrete time acc noise var: %f, gyr nosie var: %f",
+           acc_noise_var_,
+           gyr_noise_var_);
 }
 
 void Decoder::InitRos() {
@@ -489,9 +500,7 @@ void Decoder::Timing(const ros::Time& t_start) const {
 bool Decoder::CheckAlign(int mid) {
   if (need_align_ && mid == 0) {
     need_align_ = false;
-    ROS_INFO("Align start of the first subscan to mid %d, icol in scan %d",
-             mid,
-             scan_.icol);
+    ROS_INFO("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
   }
   return need_align_;
 }
@@ -567,27 +576,25 @@ void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
   m.header.stamp.fromNSec(pf.imu_gyro_ts(buf));
   m.header.frame_id = imu_frame_;
 
-  m.orientation.x = 0;
-  m.orientation.y = 0;
-  m.orientation.z = 0;
-  m.orientation.w = 0;
+  // Invalidate orientation data since we don't have it
+  // http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/Imu.html
+  auto& q = m.orientation;
+  q.x = q.y = q.z = q.w = 0;
+  m.orientation_covariance[0] = -1;
 
-  m.linear_acceleration.x = pf.imu_la_x(buf) * gravity_;
-  m.linear_acceleration.y = pf.imu_la_y(buf) * gravity_;
-  m.linear_acceleration.z = pf.imu_la_z(buf) * gravity_;
+  auto& a = m.linear_acceleration;
+  a.x = pf.imu_la_x(buf) * gravity_;
+  a.y = pf.imu_la_y(buf) * gravity_;
+  a.z = pf.imu_la_z(buf) * gravity_;
 
-  m.angular_velocity.x = Deg2Rad(pf.imu_av_x(buf));
-  m.angular_velocity.y = Deg2Rad(pf.imu_av_y(buf));
-  m.angular_velocity.z = Deg2Rad(pf.imu_av_z(buf));
+  auto& w = m.angular_velocity;
+  w.x = Deg2Rad(pf.imu_av_x(buf));
+  w.y = Deg2Rad(pf.imu_av_y(buf));
+  w.z = Deg2Rad(pf.imu_av_z(buf));
 
-  for (int i = 0; i < 9; ++i) {
-    m.orientation_covariance[i] = -1;
-    m.angular_velocity_covariance[i] = 0;
-    m.linear_acceleration_covariance[i] = 0;
-  }
   for (int i = 0; i < 9; i += 4) {
-    m.linear_acceleration_covariance[i] = 0.01;
-    m.angular_velocity_covariance[i] = 6e-4;
+    m.linear_acceleration_covariance[i] = acc_noise_var_;
+    m.angular_velocity_covariance[i] = gyr_noise_var_;
   }
 
   imu_pub_.publish(m);

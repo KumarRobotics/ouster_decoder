@@ -1,11 +1,11 @@
 <launch>
-
     <arg name="debug" default="false"/>
     <env if="$(arg debug)" name="ROSCONSOLE_CONFIG_FILE" value="$(find ouster_decoder)/launch/debug.conf"/>
 
     <arg name="lidar_ns" default="os_node"/>
     <arg name="driver_ns" default="/os_node"/>
 
+    <!-- ouster: https://data.ouster.io/downloads/datasheets/datasheet-revd-v2p1-os1.pdf -->
     <!-- anything < min_range or > max_range will be set to nan -->
     <arg name="min_range" default="0.5"/>
     <arg name="max_range" default="128.0"/>
@@ -27,7 +27,15 @@
     <!-- Align each scan to the start (otherwise will start whenever the first packet arrives)
     It is strongly advised to set this to true, otherwise a scan could start at any point in time, 
     which would cause every run to look slightly different from a bag file if start at different tim -->
-    <!-- <arg name="align" default="true"/> -->
+
+    <!-- imu: https://3cfeqx1hf82y3xcoull08ihx-wpengine.netdna-ssl.com/wp-content/uploads/2021/07/DS-000189-ICM-20948-v1.4.pdf -->
+    <!-- These are all continuous time noise density, need to multiply by sqrt(rate) to get distcrete time noise density -->
+    <!-- which we will do in the node, so the imu covariance is in discrete time -->
+    <!-- https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model -->
+    <!-- acc noise density 0.00023 g/sqrt(Hz) -->
+    <!-- gyr noise density 0.00026 rad/sqrt(Hz) -->
+    <arg name="acc_noise_std" default="0.0023"/>
+    <arg name="gyr_noise_std" default="0.00026"/>
 
     <!-- Compatible with ouster_ros  -->
     <arg name="sensor_frame" default="os_sensor"/>
@@ -42,6 +50,8 @@
         <param name="destagger" type="bool" value="$(arg destagger)"/>
         <param name="min_range" type="double" value="$(arg min_range)"/>
         <param name="max_range" type="double" value="$(arg max_range)"/>
+        <param name="acc_noise_std" type="double" value="$(arg acc_noise_std)"/>
+        <param name="gyr_noise_std" type="double" value="$(arg gyr_noise_std)"/>
 
         <!-- frames -->
         <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
