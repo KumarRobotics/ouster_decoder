@@ -38,19 +38,6 @@ std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
   return rads;
 }
 
-/// @brief stores decoded lidar data from a packet
-struct LidarData {
-  float range{};            // range in meter
-  float theta{};            // azimuth angle
-  uint16_t reflectivity{};  // calibrated reflectivity [R]
-  uint16_t signal{};        // signal intensity photon [G]
-  uint16_t ambient{};       // NIR photons [B]
-  uint16_t shift{};         // pixel shift
-} __attribute__((packed));
-
-static_assert(sizeof(LidarData) == sizeof(float) * 4,
-              "Size of LidarData must be 4 floats (16 bytes)");
-
 /// @brief image data in scan
 struct ImageData {
   float x{};
@@ -268,16 +255,18 @@ struct LidarScan {
       auto& pt = cloud.at(icol, ipx);
       if (col_valid && min_range < range && range < max_range) {
         pt.getArray3fMap() = model.ToPoint(range, theta_enc, ipx);
-      } else {
-        pt.x = pt.y = pt.z = kFloatNaN;
-      }
 
-      // https://github.com/ouster-lidar/ouster_example/issues/128
-      // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
-      pt.intensity = static_cast<float>(pf.px_signal(px_buf));
-      // pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
-      // pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 2, 255);
-      // pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
+        // https://github.com/ouster-lidar/ouster_example/issues/128
+        // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
+        // Intensity-SLAM
+        // https://arxiv.org/pdf/2102.03798.pdf
+        // const float signal = static_cast<float>(pf.px_signal(px_buf));
+        // const auto r2 = pt.getVector3fMap().squaredNorm();
+        // pt.intensity = signal * r2;
+        pt.intensity = static_cast<float>(pf.px_reflectivity(px_buf));
+      } else {
+        pt.x = pt.y = pt.z = pt.intensity = kFloatNaN;
+      }
 
       // Set pixel
       auto& px = image.at<ImageData>(ipx, im_col);
@@ -285,6 +274,10 @@ struct LidarScan {
       px.y = pt.y;
       px.z = pt.z;
       px.r = std::hypot(pt.x, pt.y, pt.z);
+
+      // pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
+      // pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 2, 255);
+      // pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
     }
 
     // Move on to next column
