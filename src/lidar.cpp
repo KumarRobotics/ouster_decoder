@@ -112,9 +112,9 @@ void LidarScan::InvalidateColumn(double dt_col) {
 
 void LidarScan::DecodeColumn(const uint8_t* const col_buf,
                              const LidarModel& model) {
-  if (icol >= image.cols) {
-    return;
-  }
+  //  if (icol >= image.cols) {
+  //    return;
+  //  }
 
   const auto& pf = *model.pf;
   const uint64_t t_ns = pf.col_timestamp(col_buf);
@@ -155,9 +155,6 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
       // Intensity-SLAM
       // https://arxiv.org/pdf/2102.03798.pdf
-      // const float signal = static_cast<float>(pf.px_signal(px_buf));
-      // const auto r2 = pt.getVector3fMap().squaredNorm();
-      // pt.intensity = signal * r2;
       pt.intensity = static_cast<float>(pf.px_reflectivity(px_buf));
     } else {
       pt.x = pt.y = pt.z = pt.intensity = kFloatNaN;
@@ -169,10 +166,6 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     px.y = pt.y;
     px.z = pt.z;
     px.r = std::hypot(pt.x, pt.y, pt.z);
-
-    // pt.r = std::min<uint16_t>(pf.px_reflectivity(px_buf) >> 5, 255);
-    // pt.g = std::min<uint16_t>(pf.px_signal(px_buf) >> 2, 255);
-    // pt.b = std::min<uint16_t>(pf.px_ambient(px_buf), 255);
   }
 
   // Move on to next column

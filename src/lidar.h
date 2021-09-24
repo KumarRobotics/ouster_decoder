@@ -28,6 +28,9 @@ struct LidarModel {
   LidarModel() = default;
   explicit LidarModel(const std::string& metadata);
 
+  /// @brief whether this model is ready
+  bool Initialized() const { return !altitudes.empty(); }
+
   int rows{};                     // number of beams
   int cols{};                     // cols of a full scan
   int freq{};                     // frequency
@@ -115,6 +118,7 @@ struct LidarScan {
   /// @brief Invalidate an entire column
   void InvalidateColumn(double dt_col);
 
+  /// @brief Decode column
   void DecodeColumn(const uint8_t* const col_buf, const LidarModel& model);
 
   /// @brief Update camera info roi data with this scan

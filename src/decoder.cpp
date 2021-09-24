@@ -6,6 +6,7 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include <std_msgs/String.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 
 #include "lidar.h"
@@ -32,12 +33,13 @@ class Decoder {
   /// Callbacks
   void LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg);
   void ImuPacketCb(const ouster_ros::PacketMsg& imu_msg);
+  void MetadataCb(const std_msgs::String& meta_msg);
 
  private:
   /// Initialize ros related stuff (frame, publisher, subscriber)
   void InitRos();
   /// Initialize ouster related stuff
-  void InitOuster();
+  void InitModel(const std::string& metadata);
   /// Initialize all parameters
   void InitParams();
   /// Send static transforms
@@ -57,6 +59,7 @@ class Decoder {
   ros::NodeHandle pnh_;
   image_transport::ImageTransport it_;
   ros::Subscriber lidar_sub_, imu_sub_;
+  ros::Subscriber meta_sub_;
   ros::Publisher cloud_pub_, imu_pub_;
   ros::Publisher range_pub_;
   image_transport::CameraPublisher camera_pub_;
@@ -64,8 +67,8 @@ class Decoder {
   std::string sensor_frame_, lidar_frame_, imu_frame_;
 
   // data
-  LidarModel model_;
   LidarScan scan_;
+  LidarModel model_;
   sensor_msgs::CameraInfoPtr cinfo_msg_;
 
   // params
@@ -77,23 +80,27 @@ class Decoder {
 };
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
-  InitOuster();
-  InitParams();
-  InitRos();
-  SendTransform();
+  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
+  // wait for service
+  if (client.waitForExistence()) {
+    ROS_INFO_STREAM(client.getService() << " is available");
+    ouster_ros::OSConfigSrv cfg{};
+    // Initialize everything if service call is successful
+    if (client.call(cfg)) {
+      InitModel(cfg.response.metadata);
+      InitRos();
+      InitParams();
+      SendTransform();
+    } else {
+      ROS_ERROR_STREAM(client.getService() << " call failed, shutdown");
+      ros::shutdown();
+    }
+  }
 }
 
-void Decoder::InitOuster() {
-  // Call service to retrieve sensor info, this must be done first
-  ouster_ros::OSConfigSrv cfg{};
-  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
-  client.waitForExistence();
-  if (!client.call(cfg)) {
-    throw std::runtime_error("Calling config service failed");
-  }
-
+void Decoder::InitModel(const std::string& metadata) {
   // parse metadata into lidar model
-  model_ = LidarModel{cfg.response.metadata};
+  model_ = LidarModel{metadata};
   ROS_INFO_STREAM("Lidar mode: " << os::to_string(model_.info.mode));
   ROS_INFO("Lidar: %d x %d @ %d hz", model_.rows, model_.cols, model_.freq);
   ROS_INFO("Columns per packet: %d", model_.pf->columns_per_packet);
@@ -112,9 +119,8 @@ void Decoder::InitParams() {
   scan_.destagger = pnh_.param<bool>("destagger", false);
   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
   scan_.min_range = pnh_.param<double>("min_range", 0.5);
-  ROS_INFO("Min range: %f", scan_.min_range);
   scan_.max_range = pnh_.param<double>("max_range", 128.0);
-  ROS_INFO("Min range: %f", scan_.max_range);
+  ROS_INFO("Range: [%f, %f]", scan_.min_range, scan_.max_range);
 
   int num_subscans = pnh_.param<int>("divide", 1);
   // Make sure cols is divisible by num_subscans
@@ -147,9 +153,9 @@ void Decoder::InitRos() {
   ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
 
   // Publishers
+  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
   cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
   camera_pub_ = it_.advertiseCamera("image", 10);
-  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
   range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
 
   // Frames
@@ -200,7 +206,6 @@ void Decoder::PublishAndReset() {
   ++scan_.iscan;
   // Reset cached data after publish
   scan_.SoftReset(model_.cols);
-  //  ROS_DEBUG("After reset, icol: %d, iscan: %d", scan_.icol, scan_.iscan);
 }
 
 void Decoder::Timing(const ros::Time& t_start) const {
@@ -226,6 +231,14 @@ bool Decoder::CheckAlign(int mid) {
     ROS_INFO("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
   }
   return need_align_;
+}
+
+// This is currently disabled
+void Decoder::MetadataCb(const std_msgs::String& meta_msg) {
+  InitModel(meta_msg.data);
+  InitRos();
+  InitParams();
+  SendTransform();
 }
 
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
