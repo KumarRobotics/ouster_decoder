@@ -16,6 +16,8 @@ src/decoder.cpp
 src/decoder.h
 src/driver.cpp
 src/example.cpp
+src/lidar.cpp
+src/lidar.h
 src/model.cpp
 src/model_test.cpp
 src/utils.h

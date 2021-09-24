@@ -54,19 +54,20 @@
         <param name="gyr_noise_std" type="double" value="$(arg gyr_noise_std)"/>
 
         <!-- frames -->
-        <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
-        <param name="lidar_frame" type="string" value="$(arg lidar_frame)"/>
         <param name="imu_frame" type="string" value="$(arg imu_frame)"/>
+        <param name="lidar_frame" type="string" value="$(arg lidar_frame)"/>
+        <param name="sensor_frame" type="string" value="$(arg sensor_frame)"/>
 
         <!-- input topics -->
+        <remap from="~metadata" to="$(arg driver_ns)/metadata"/>
         <remap from="~os_config" to="$(arg driver_ns)/os_config"/>
-        <remap from="~lidar_packets" to="$(arg driver_ns)/lidar_packets"/>
         <remap from="~imu_packets" to="$(arg driver_ns)/imu_packets"/>
+        <remap from="~lidar_packets" to="$(arg driver_ns)/lidar_packets"/>
 
         <!-- output topics -->
+        <remap from="~imu" to="imu"/>
+        <remap from="~cloud" to="cloud"/>
         <remap from="~image" to="image"/>
         <remap from="~camera_info" to="camera_info"/>
-        <remap from="~cloud" to="cloud"/>
-        <remap from="~imu" to="imu"/>
     </node>
 </launch>
