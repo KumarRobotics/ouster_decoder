@@ -20,7 +20,7 @@ struct ImageData {
   //  float r{};
   uint16_t r{};
   uint16_t intensity{};
-} __attribute__((packed));
+};
 
 static_assert(sizeof(ImageData) == sizeof(float) * 4,
               "Size of ImageData must be 4 floats (16 bytes)");
