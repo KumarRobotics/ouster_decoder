@@ -49,9 +49,9 @@ void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
   cinfo.D.reserve(pixel_shifts().size());
   cinfo.D.insert(cinfo.D.end(), pixel_shifts().begin(), pixel_shifts().end());
 
-  cinfo.K[0] = dt_col;       // time between each column
-  cinfo.K[1] = d_azimuth;    // radian between each column
-  cinfo.K[2] = beam_offset;  // distance from center to beam
+  cinfo.K[0] = dt_col;  // time between each column
+  //  cinfo.K[1] = d_azimuth;    // radian between each column
+  //  cinfo.K[2] = beam_offset;  // distance from center to beam
 }
 
 void LidarScan::Allocate(int rows, int cols) {
@@ -112,10 +112,6 @@ void LidarScan::InvalidateColumn(double dt_col) {
 
 void LidarScan::DecodeColumn(const uint8_t* const col_buf,
                              const LidarModel& model) {
-  //  if (icol >= image.cols) {
-  //    return;
-  //  }
-
   const auto& pf = *model.pf;
   const uint64_t t_ns = pf.col_timestamp(col_buf);
   const uint32_t encoder = pf.col_encoder(col_buf);
@@ -165,15 +161,19 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     px.x = pt.x;
     px.y = pt.y;
     px.z = pt.z;
-    px.r = std::hypot(pt.x, pt.y, pt.z);
+    px.r = static_cast<uint16_t>(std::hypot(pt.x, pt.y, pt.z) * range_scale);
+    px.intensity =
+        std::isnan(pt.intensity) ? 0 : static_cast<uint16_t>(pt.intensity);
   }
 
   // Move on to next column
   ++icol;
 }
 
-void LidarScan::UpdateRoi(sensor_msgs::RegionOfInterest& roi) const noexcept {
+void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
+  cinfo.R[0] = range_scale;
   // Update camera info roi with curr_scan
+  auto& roi = cinfo.roi;
   roi.x_offset = StartingCol();
   roi.y_offset = 0;
   roi.width = image.cols;

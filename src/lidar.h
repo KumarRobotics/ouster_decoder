@@ -17,7 +17,9 @@ struct ImageData {
   float x{};
   float y{};
   float z{};
-  float r{};
+  //  float r{};
+  uint16_t r{};
+  uint16_t intensity{};
 } __attribute__((packed));
 
 static_assert(sizeof(ImageData) == sizeof(float) * 4,
@@ -87,6 +89,7 @@ struct LidarScan {
   int prev_uid{-1};
   double min_range{};
   double max_range{};
+  double range_scale{};
   bool destagger{false};
 
   cv::Mat image;
@@ -122,7 +125,7 @@ struct LidarScan {
   void DecodeColumn(const uint8_t* const col_buf, const LidarModel& model);
 
   /// @brief Update camera info roi data with this scan
-  void UpdateRoi(sensor_msgs::RegionOfInterest& roi) const noexcept;
+  void UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept;
 };
 
 }  // namespace ouster_decoder

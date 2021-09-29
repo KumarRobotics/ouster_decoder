@@ -58,10 +58,9 @@ class Decoder {
   // ros
   ros::NodeHandle pnh_;
   image_transport::ImageTransport it_;
-  ros::Subscriber lidar_sub_, imu_sub_;
-  ros::Subscriber meta_sub_;
+  ros::Subscriber lidar_sub_, imu_sub_, meta_sub_;
   ros::Publisher cloud_pub_, imu_pub_;
-  ros::Publisher range_pub_;
+  ros::Publisher range_pub_, intensity_pub_;
   image_transport::CameraPublisher camera_pub_;
   tf2_ros::StaticTransformBroadcaster static_tf_;
   std::string sensor_frame_, lidar_frame_, imu_frame_;
@@ -119,15 +118,23 @@ void Decoder::InitParams() {
   scan_.destagger = pnh_.param<bool>("destagger", false);
   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
   scan_.min_range = pnh_.param<double>("min_range", 0.5);
-  scan_.max_range = pnh_.param<double>("max_range", 128.0);
-  ROS_INFO("Range: [%f, %f]", scan_.min_range, scan_.max_range);
+  scan_.max_range = pnh_.param<double>("max_range", 127.0);
+  scan_.range_scale = pnh_.param<double>("range_scale", 512.0);
+  if (scan_.max_range * scan_.range_scale >
+      static_cast<double>(std::numeric_limits<uint16_t>::max())) {
+    throw std::domain_error("max range exceeds representation");
+  }
+  ROS_INFO("Range: [%f, %f], scale: %f",
+           scan_.min_range,
+           scan_.max_range,
+           scan_.range_scale);
 
   int num_subscans = pnh_.param<int>("divide", 1);
   // Make sure cols is divisible by num_subscans
   if (num_subscans < 1 || model_.cols % num_subscans != 0) {
-    throw std::runtime_error("num subscans is not divisible by cols: " +
-                             std::to_string(model_.cols) + " / " +
-                             std::to_string(num_subscans));
+    throw std::domain_error("num subscans is not divisible by cols: " +
+                            std::to_string(model_.cols) + " / " +
+                            std::to_string(num_subscans));
   }
 
   const int scan_cols = model_.cols / num_subscans;
@@ -157,6 +164,7 @@ void Decoder::InitRos() {
   cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
   camera_pub_ = it_.advertiseCamera("image", 10);
   range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
+  intensity_pub_ = pnh_.advertise<sensor_msgs::Image>("intensity", 1);
 
   // Frames
   sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
@@ -188,14 +196,30 @@ void Decoder::PublishAndReset() {
   // Update camera info roi with scan
   cinfo_msg_->binning_x = scan_.iscan;
   cinfo_msg_->binning_y = model_.cols / scan_.cols();
-  scan_.UpdateRoi(cinfo_msg_->roi);
+  scan_.UpdateCinfo(*cinfo_msg_);
   camera_pub_.publish(image_msg, cinfo_msg_);
 
   // Publish range image on demand
-  if (range_pub_.getNumSubscribers() > 0) {
-    cv::Mat range;
-    cv::extractChannel(scan_.image, range, 3);
-    range_pub_.publish(cv_bridge::CvImage(header, "32FC1", range).toImageMsg());
+  if (range_pub_.getNumSubscribers() > 0 ||
+      intensity_pub_.getNumSubscribers() > 0) {
+    // cast image as 8 channel short so that we can extract the last 2 as range
+    // and intensity
+    cv::Mat image_ushort(
+        scan_.image.rows, scan_.image.cols, CV_16UC(8), scan_.image.data);
+
+    if (range_pub_.getNumSubscribers() > 0) {
+      cv::Mat range;
+      cv::extractChannel(image_ushort, range, 6);
+      range_pub_.publish(
+          cv_bridge::CvImage(header, "16UC1", range).toImageMsg());
+    }
+
+    if (intensity_pub_.getNumSubscribers() > 0) {
+      cv::Mat intensity;
+      cv::extractChannel(image_ushort, intensity, 7);
+      intensity_pub_.publish(
+          cv_bridge::CvImage(header, "16UC1", intensity).toImageMsg());
+    }
   }
 
   // Publish cloud
