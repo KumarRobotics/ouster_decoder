@@ -174,6 +174,10 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       pt.x = pt.y = pt.z = pt.intensity = kFloatNaN;
       px.r = px.intensity = 0;
     }
+
+    px.x = pt.x;
+    px.y = pt.y;
+    px.z = pt.z;
   }
 
   // Move on to next column
