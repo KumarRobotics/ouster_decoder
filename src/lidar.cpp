@@ -144,6 +144,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
     // Set point
     auto& pt = cloud.at(icol, ipx);
+    auto& px = image.at<ImageData>(ipx, im_col);
     if (col_valid && min_range < range && range < max_range) {
       pt.getArray3fMap() = model.ToPoint(range, theta_enc, ipx);
 
@@ -151,19 +152,14 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
       // Intensity-SLAM
       // https://arxiv.org/pdf/2102.03798.pdf
-      pt.intensity = static_cast<float>(pf.px_reflectivity(px_buf));
+      px.r = static_cast<uint16_t>(pt.getVector3fMap().norm() * range_scale);
+      const auto ref = pf.px_reflectivity(px_buf);
+      pt.intensity = static_cast<float>(ref);
+      px.intensity = ref;
     } else {
       pt.x = pt.y = pt.z = pt.intensity = kFloatNaN;
+      px.r = px.intensity = 0;
     }
-
-    // Set pixel
-    auto& px = image.at<ImageData>(ipx, im_col);
-    px.x = pt.x;
-    px.y = pt.y;
-    px.z = pt.z;
-    px.r = static_cast<uint16_t>(std::hypot(pt.x, pt.y, pt.z) * range_scale);
-    px.intensity =
-        std::isnan(pt.intensity) ? 0 : static_cast<uint16_t>(pt.intensity);
   }
 
   // Move on to next column
