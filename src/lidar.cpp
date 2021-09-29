@@ -38,6 +38,20 @@ LidarModel::LidarModel(const std::string& metadata) {
   azimuths = TransformDeg2Rad(info.beam_azimuth_angles);
 }
 
+Eigen::Vector3f LidarModel::ToPoint(float range,
+                                    float theta_enc,
+                                    int row) const {
+  const float n = beam_offset;
+  const float d = range - n;
+  const float phi = altitudes[row];
+  const float cos_phi = std::cos(phi);
+  const float theta = theta_enc - azimuths[row];
+
+  return {d * std::cos(theta) * cos_phi + n * std::cos(theta_enc),
+          d * std::sin(theta) * cos_phi + n * std::sin(theta_enc),
+          d * std::sin(phi)};
+}
+
 void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
   cinfo.height = rows;
   cinfo.width = cols;
@@ -146,7 +160,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     auto& pt = cloud.at(icol, ipx);
     auto& px = image.at<ImageData>(ipx, im_col);
     if (col_valid && min_range < range && range < max_range) {
-      pt.getArray3fMap() = model.ToPoint(range, theta_enc, ipx);
+      pt.getVector3fMap() = model.ToPoint(range, theta_enc, ipx);
 
       // https://github.com/ouster-lidar/ouster_example/issues/128
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000

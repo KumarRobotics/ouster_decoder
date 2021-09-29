@@ -61,17 +61,7 @@ struct LidarModel {
   ///
   [[nodiscard]] Eigen::Vector3f ToPoint(float range,
                                         float theta_enc,
-                                        int row) const {
-    const float n = beam_offset;
-    const float d = range - n;
-    const float phi = altitudes[row];
-    const float cos_phi = std::cos(phi);
-    const float theta = theta_enc - azimuths[row];
-
-    return {d * std::cos(theta) * cos_phi + n * std::cos(theta_enc),
-            d * std::sin(theta) * cos_phi + n * std::sin(theta_enc),
-            d * std::sin(phi)};
-  }
+                                        int row) const;
 
   /// @brief Return a unique id for a measurement
   [[nodiscard]] int Uid(int fid, int mid) const noexcept {
@@ -105,12 +95,12 @@ struct LidarScan {
   /// @brief Starting column of this scan
   [[nodiscard]] int StartingCol() const noexcept { return iscan * cols(); }
 
-  /// @brief Allocate storage for the scan
-  void Allocate(int rows, int cols);
-
   /// @brief Detect if there is a jump in the lidar data
   /// @return 0 - no jump, >0 - jump forward in time, <0 - jump backward in time
   [[nodiscard]] int DetectJump(int uid) noexcept;
+
+  /// @brief Allocate storage for the scan
+  void Allocate(int rows, int cols);
 
   /// @brief Hard reset internal counters and prev_uid
   void HardReset() noexcept;
