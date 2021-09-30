@@ -6,10 +6,9 @@ namespace os = ouster_ros::sensor;
 
 constexpr float kMmToM = 0.001;
 constexpr double kTau = 2 * M_PI;
-constexpr float kFloatNaN = std::numeric_limits<float>::quiet_NaN();
+constexpr float kNaNF = std::numeric_limits<float>::quiet_NaN();
 
 namespace {
-constexpr double Deg2Rad(double deg) { return deg * kTau / 360.0; }
 
 /// @brief Convert a vector of double from deg to rad
 std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
@@ -20,6 +19,7 @@ std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
   }
   return rads;
 }
+
 }  // namespace
 
 LidarModel::LidarModel(const std::string& metadata) {
@@ -106,12 +106,12 @@ void LidarScan::SoftReset(int full_col) noexcept {
 void LidarScan::InvalidateColumn(double dt_col) {
   for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
     auto& pt = cloud.at(icol, irow);
-    pt.x = pt.y = pt.z = kFloatNaN;
+    pt.x = pt.y = pt.z = kNaNF;
   }
 
   for (int irow = 0; irow < image.rows; ++irow) {
     auto& px = image.at<cv::Vec4f>(irow, icol);
-    px[0] = px[1] = px[2] = px[3] = kFloatNaN;
+    px[0] = px[1] = px[2] = px[3] = kNaNF;
   }
 
   // It is possible that the jump spans two subscans, this will cause the
@@ -164,14 +164,15 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
       // https://github.com/ouster-lidar/ouster_example/issues/128
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
-      // Intensity-SLAM
+
+      // Consider Intensity-SLAM
       // https://arxiv.org/pdf/2102.03798.pdf
       px.r = static_cast<uint16_t>(pt.getVector3fMap().norm() * range_scale);
-      const auto ref = pf.px_reflectivity(px_buf);
-      pt.intensity = static_cast<float>(ref);
-      px.intensity = ref;
+
+      px.intensity = pf.px_reflectivity(px_buf);
+      pt.intensity = static_cast<float>(px.intensity);
     } else {
-      pt.x = pt.y = pt.z = pt.intensity = kFloatNaN;
+      pt.x = pt.y = pt.z = pt.intensity = kNaNF;
       px.r = px.intensity = 0;
     }
 

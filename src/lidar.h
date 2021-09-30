@@ -10,7 +10,7 @@ namespace ouster_decoder {
 
 using PointT = pcl::PointXYZI;
 using CloudT = pcl::PointCloud<PointT>;
-constexpr double Deg2Rad(double deg) { return deg * M_PI / 180.0; }
+inline constexpr double Deg2Rad(double deg) { return deg * M_PI / 180.0; }
 
 /// @brief image data in scan
 struct ImageData {
@@ -59,14 +59,10 @@ struct LidarModel {
   ///    |/  theta
   ///    o ---------> x  (connector)
   ///
-  [[nodiscard]] Eigen::Vector3f ToPoint(float range,
-                                        float theta_enc,
-                                        int row) const;
+  Eigen::Vector3f ToPoint(float range, float theta_enc, int row) const;
 
   /// @brief Return a unique id for a measurement
-  [[nodiscard]] int Uid(int fid, int mid) const noexcept {
-    return fid * cols + mid;
-  }
+  int Uid(int fid, int mid) const noexcept { return fid * cols + mid; }
 
   /// @brief Update camera info with this model
   void UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const;
@@ -86,18 +82,18 @@ struct LidarScan {
   CloudT cloud;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
-  [[nodiscard]] int rows() const noexcept { return image.rows; }
-  [[nodiscard]] int cols() const noexcept { return image.cols; }
+  int rows() const noexcept { return image.rows; }
+  int cols() const noexcept { return image.cols; }
 
   /// @brief whether this scan is full
-  [[nodiscard]] bool IsFull() const noexcept { return icol >= cols(); }
+  bool IsFull() const noexcept { return icol >= cols(); }
 
   /// @brief Starting column of this scan
-  [[nodiscard]] int StartingCol() const noexcept { return iscan * cols(); }
+  int StartingCol() const noexcept { return iscan * cols(); }
 
   /// @brief Detect if there is a jump in the lidar data
   /// @return 0 - no jump, >0 - jump forward in time, <0 - jump backward in time
-  [[nodiscard]] int DetectJump(int uid) noexcept;
+  int DetectJump(int uid) noexcept;
 
   /// @brief Allocate storage for the scan
   void Allocate(int rows, int cols);
