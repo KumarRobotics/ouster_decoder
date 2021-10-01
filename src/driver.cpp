@@ -92,9 +92,9 @@ int connection_loop(ros::NodeHandle& nh,
   return EXIT_SUCCESS;
 }
 
-void AdvertiseService(ros::NodeHandle& nh,
-                      ros::ServiceServer& srv,
-                      const sensor::sensor_info& info) {
+void advertise_service(ros::NodeHandle& nh,
+                       ros::ServiceServer& srv,
+                       const sensor::sensor_info& info) {
   auto metadata = sensor::to_string(info);
   ROS_INFO("Using lidar_mode: %s", sensor::to_string(info.mode).c_str());
   ROS_INFO("%s sn: %s firmware rev: %s",
@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
 
     auto meta_cb = [&nh, &srv](const std_msgs::String& str_msg) {
       auto info = sensor::parse_metadata(str_msg.data);
-      AdvertiseService(nh, srv, info);
+      advertise_service(nh, srv, info);
     };
 
     // populate info for config service
@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
       } else {
         ROS_INFO("metadata file is given, using %s", meta_file.c_str());
         auto info = sensor::metadata_from_json(meta_file);
-        AdvertiseService(nh, srv, info);
+        advertise_service(nh, srv, info);
       }
 
       // just serve config service
@@ -214,9 +214,9 @@ int main(int argc, char** argv) {
 
     // write metadata file to cwd (usually ~/.ros)
     auto metadata = sensor::get_metadata(*cli);
-    if (!meta_file.size() && hostname.size()) {
-      meta_file = hostname + ".json";
-      ROS_INFO("metadata empty, use hostname instead: %s", meta_file.c_str());
+    if (meta_file.empty()) {
+      meta_file = hostname + ".json";  // hostname must be nonempty
+      ROS_INFO("meta_file not given, use: %s", meta_file.c_str());
     }
 
     // populate sensor info

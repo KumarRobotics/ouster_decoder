@@ -90,8 +90,8 @@ void Decoder::InitRos() {
   lidar_sub_ =
       pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
   imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
-  ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
-  ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
+  ROS_INFO_STREAM("Subscribing lidar packets: " << lidar_sub_.getTopic());
+  ROS_INFO_STREAM("Subscribing imu packets: " << imu_sub_.getTopic());
 
   // Publishers
   camera_pub_ = it_.advertiseCamera("image", 10);
