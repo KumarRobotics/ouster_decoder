@@ -23,6 +23,7 @@ constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
 class Decoder {
  public:
   explicit Decoder(const ros::NodeHandle& pnh);
+  ~Decoder() noexcept = default;
 
   // No copy no move
   Decoder(const Decoder&) = delete;
@@ -33,17 +34,17 @@ class Decoder {
   /// Callbacks
   void LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg);
   void ImuPacketCb(const ouster_ros::PacketMsg& imu_msg);
-  void MetadataCb(const std_msgs::String& meta_msg);
 
  private:
   /// Initialize ros related stuff (frame, publisher, subscriber)
   void InitRos();
-  /// Initialize ouster related stuff
-  void InitModel(const std::string& metadata);
   /// Initialize all parameters
   void InitParams();
-  /// Send static transforms
-  void SendTransform();
+  /// Initialize ouster related stuff
+  void InitOuster();
+  void InitModel(const std::string& metadata);
+  void InitScan(const LidarModel& model);
+  void SendTransform(const LidarModel& model);
 
   /// Whether we are still waiting for alignment to mid 0
   [[nodiscard]] bool CheckAlign(int mid);
@@ -72,47 +73,45 @@ class Decoder {
 
   // params
   double gravity_{};        // gravity
-  bool strict_{false};      // strict mode will die if data jumps backwards
+  bool replay_{false};      // replay mode will reinitialize on jump
   bool need_align_{true};   // whether to align scan
   double acc_noise_var_{};  // discrete time acc noise variance
   double gyr_noise_var_{};  // discrete time gyr noise variance
 };
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
-  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
-  // wait for service
-  if (client.waitForExistence()) {
-    ROS_INFO_STREAM(client.getService() << " is available");
-    ouster_ros::OSConfigSrv cfg{};
-    // Initialize everything if service call is successful
-    if (client.call(cfg)) {
-      InitModel(cfg.response.metadata);
-      InitRos();
-      InitParams();
-      SendTransform();
-    } else {
-      ROS_ERROR_STREAM(client.getService() << " call failed, shutdown");
-      ros::shutdown();
-    }
-  }
+  InitParams();
+  InitRos();
+  InitOuster();
 }
 
-void Decoder::InitModel(const std::string& metadata) {
-  // parse metadata into lidar model
-  model_ = LidarModel{metadata};
-  ROS_INFO_STREAM("Lidar mode: " << os::to_string(model_.info.mode));
-  ROS_INFO("Lidar: %d x %d @ %d hz", model_.rows, model_.cols, model_.freq);
-  ROS_INFO("Columns per packet: %d", model_.pf->columns_per_packet);
-  ROS_INFO("Pixels per column: %d", model_.pf->pixels_per_column);
+void Decoder::InitRos() {
+  // Subscribers, queue size is 1 second
+  lidar_sub_ =
+      pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
+  imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
+  ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
+  ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
 
-  // Generate partial camera info message
-  cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
-  model_.UpdateCameraInfo(*cinfo_msg_);
+  // Publishers
+  camera_pub_ = it_.advertiseCamera("image", 10);
+  cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
+  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
+  range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
+  intensity_pub_ = pnh_.advertise<sensor_msgs::Image>("intensity", 1);
+
+  // Frames
+  sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
+  lidar_frame_ = pnh_.param<std::string>("lidar_frame", "os_lidar");
+  imu_frame_ = pnh_.param<std::string>("imu_frame", "os_imu");
+  ROS_INFO_STREAM("Sensor frame: " << sensor_frame_);
+  ROS_INFO_STREAM("Lidar frame: " << lidar_frame_);
+  ROS_INFO_STREAM("Imu frame: " << imu_frame_);
 }
 
 void Decoder::InitParams() {
-  strict_ = pnh_.param<bool>("strict", false);
-  ROS_INFO("Strict: %s", strict_ ? "true" : "false");
+  replay_ = pnh_.param<bool>("replay", false);
+  ROS_INFO("Replay: %s", replay_ ? "true" : "false");
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   ROS_INFO("Gravity: %f", gravity_);
   scan_.destagger = pnh_.param<bool>("destagger", false);
@@ -129,18 +128,6 @@ void Decoder::InitParams() {
            scan_.max_range,
            scan_.range_scale);
 
-  int num_subscans = pnh_.param<int>("divide", 1);
-  // Make sure cols is divisible by num_subscans
-  if (num_subscans < 1 || model_.cols % num_subscans != 0) {
-    throw std::domain_error("num subscans is not divisible by cols: " +
-                            std::to_string(model_.cols) + " / " +
-                            std::to_string(num_subscans));
-  }
-
-  const int scan_cols = model_.cols / num_subscans;
-  ROS_INFO("Subscan %d x %d, total %d", model_.rows, scan_cols, num_subscans);
-  scan_.Allocate(model_.rows, scan_cols);
-
   acc_noise_var_ = pnh_.param<double>("acc_noise_std", 0.0023);
   gyr_noise_var_ = pnh_.param<double>("gyr_noise_std", 0.00026);
   // https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model
@@ -151,35 +138,70 @@ void Decoder::InitParams() {
            gyr_noise_var_);
 }
 
-void Decoder::InitRos() {
-  // Subscribers, queue size is 1 second
-  lidar_sub_ =
-      pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
-  imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
-  ROS_INFO_STREAM("Subscribing lidar packets from: " << lidar_sub_.getTopic());
-  ROS_INFO_STREAM("Subscribing imu packets from: " << imu_sub_.getTopic());
+void Decoder::InitOuster() {
+  ROS_INFO_STREAM("=== Initializing Ouster Decoder ===");
+  // wait for service
+  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
 
-  // Publishers
-  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
-  cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
-  camera_pub_ = it_.advertiseCamera("image", 10);
-  range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
-  intensity_pub_ = pnh_.advertise<sensor_msgs::Image>("intensity", 1);
+  // NOTE: it is possible that in replay mode, the service was shutdown and
+  // re-advertised. If the client call is too soon, then we risk getting the old
+  // metadata. It is also possible that the call would fail because the driver
+  // side hasn't finished re-advertising. Therefore in replay mode, we add a
+  // small delay before calling the service.
+  if (replay_) {
+    ros::Duration(0.1).sleep();
+  }
 
-  // Frames
-  sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
-  lidar_frame_ = pnh_.param<std::string>("lidar_frame", "os_lidar");
-  imu_frame_ = pnh_.param<std::string>("imu_frame", "os_imu");
-  ROS_INFO_STREAM("Sensor frame: " << sensor_frame_);
-  ROS_INFO_STREAM("Lidar frame: " << lidar_frame_);
-  ROS_INFO_STREAM("Imu frame: " << imu_frame_);
+  client.waitForExistence();
+
+  ouster_ros::OSConfigSrv cfg{};
+  // Initialize everything if service call is successful
+  if (client.call(cfg)) {
+    InitModel(cfg.response.metadata);
+    InitScan(model_);
+    SendTransform(model_);
+  } else {
+    ROS_ERROR_STREAM(client.getService() << " call failed, abort.");
+    ros::shutdown();
+  }
 }
 
-void Decoder::SendTransform() {
+void Decoder::InitModel(const std::string& metadata) {
+  // parse metadata into lidar model
+  model_ = LidarModel{metadata};
+  ROS_INFO("Lidar mode %s: %d x %d @ %d hz",
+           os::to_string(model_.info.mode).c_str(),
+           model_.rows,
+           model_.cols,
+           model_.freq);
+  ROS_INFO("Columns per packet: %d, Pixels per column: %d",
+           model_.pf->columns_per_packet,
+           model_.pf->pixels_per_column);
+
+  // Generate partial camera info message
+  cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
+  model_.UpdateCameraInfo(*cinfo_msg_);
+}
+
+void Decoder::InitScan(const LidarModel& model) {
+  int num_subscans = pnh_.param<int>("divide", 1);
+  // Make sure cols is divisible by num_subscans
+  if (num_subscans < 1 || model.cols % num_subscans != 0) {
+    throw std::domain_error(
+        "num subscans is not divisible by cols: " + std::to_string(model.cols) +
+        " / " + std::to_string(num_subscans));
+  }
+
+  const int subscan_cols = model.cols / num_subscans;
+  ROS_INFO("Subscan %d x %d, total %d", model.rows, subscan_cols, num_subscans);
+  scan_.Allocate(model.rows, subscan_cols);
+}
+
+void Decoder::SendTransform(const LidarModel& model) {
   static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
-      model_.info.imu_to_sensor_transform, sensor_frame_, imu_frame_));
+      model.info.imu_to_sensor_transform, sensor_frame_, imu_frame_));
   static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
-      model_.info.lidar_to_sensor_transform, sensor_frame_, lidar_frame_));
+      model.info.lidar_to_sensor_transform, sensor_frame_, lidar_frame_));
 }
 
 void Decoder::PublishAndReset() {
@@ -257,14 +279,6 @@ bool Decoder::CheckAlign(int mid) {
   return need_align_;
 }
 
-// This is currently disabled
-void Decoder::MetadataCb(const std_msgs::String& meta_msg) {
-  InitModel(meta_msg.data);
-  InitRos();
-  InitParams();
-  SendTransform();
-}
-
 void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
   const auto t0 = ros::Time::now();
   const auto* packet_buf = lidar_msg.buf.data();
@@ -314,14 +328,18 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
         }
       }
     } else {
+      // Handle backward jump or large forward jump
       ROS_ERROR("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
-      if (strict_) {
-        ROS_FATAL("In strict mode, shutting down...");
-        ros::shutdown();
-      } else {
-        ROS_WARN("Not in strict mode, reset internal state and wait for align");
+      if (replay_) {
+        ROS_WARN("In replay mode, re-initialize...");
         need_align_ = true;
         scan_.HardReset();
+        // Also need to reinitialize everything since it is possible that it is
+        // a different dataset
+        InitOuster();
+      } else {
+        ROS_FATAL("Not in replay mode, shutting down...");
+        ros::shutdown();
       }
       return;
     }

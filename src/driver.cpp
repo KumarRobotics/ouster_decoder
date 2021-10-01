@@ -110,11 +110,9 @@ void AdvertiseService(ros::NodeHandle& nh,
   srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
       "os_config",
       [metadata](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
-        if (metadata.size()) {
-          res.metadata = metadata;
-          return true;
-        } else
-          return false;
+        if (metadata.empty()) return false;
+        res.metadata = metadata;
+        return true;
       });
   ROS_INFO("Advertise service to %s", srv.getService().c_str());
 }
@@ -124,19 +122,8 @@ int main(int argc, char** argv) {
   ros::NodeHandle nh("~");
   // Extra stuff
   ros::Publisher pub_meta;
-  ros::Subscriber sub_meta;
+  ros::Subscriber meta_sub;
   ros::ServiceServer srv;
-
-  std::string published_metadata;
-  // auto srv = nh.advertiseService<OSConfigSrv::Request,
-  // OSConfigSrv::Response>(
-  //     "os_config", [&](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
-  //       if (published_metadata.size()) {
-  //         res.metadata = published_metadata;
-  //         return true;
-  //       } else
-  //         return false;
-  //     });
 
   // empty indicates "not set" since roslaunch xml can't optionally set params
   auto hostname = nh.param("sensor_hostname", std::string{});
@@ -193,10 +180,10 @@ int main(int argc, char** argv) {
     // populate info for config service
     try {
       if (meta_file.empty()) {
-        sub_meta = nh.subscribe<std_msgs::String, const std_msgs::String&>(
+        meta_sub = nh.subscribe<std_msgs::String, const std_msgs::String&>(
             "metadata", 1, meta_cb);
         ROS_INFO("metadata is empty, subscribing to %s",
-                 sub_meta.getTopic().c_str());
+                 meta_sub.getTopic().c_str());
 
       } else {
         ROS_INFO("metadata file is given, using %s", meta_file.c_str());
@@ -231,27 +218,26 @@ int main(int argc, char** argv) {
       meta_file = hostname + ".json";
       ROS_INFO("metadata empty, use hostname instead: %s", meta_file.c_str());
     }
-    write_metadata(meta_file, metadata);
 
     // populate sensor info
     auto info = sensor::parse_metadata(metadata);
     populate_metadata_defaults(info, sensor::MODE_UNSPEC);
-    published_metadata = to_string(info);
+    metadata = to_string(info);           // regenerate metadata
+    write_metadata(meta_file, metadata);  // write to disk
 
     // publish metadata
     pub_meta = nh.advertise<std_msgs::String>("metadata", 1, true);
     std_msgs::String meta_msg;
-    meta_msg.data = published_metadata;
+    meta_msg.data = metadata;
     pub_meta.publish(meta_msg);
     ROS_INFO("Publish metadata to %s", pub_meta.getTopic().c_str());
 
     srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
-        "os_config", [&](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
-          if (published_metadata.size()) {
-            res.metadata = published_metadata;
-            return true;
-          } else
-            return false;
+        "os_config",
+        [metadata](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
+          if (metadata.empty()) return false;
+          res.metadata = metadata;
+          return true;
         });
 
     ROS_INFO("Using lidar_mode: %s", sensor::to_string(info.mode).c_str());

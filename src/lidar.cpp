@@ -69,8 +69,11 @@ void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
 }
 
 void LidarScan::Allocate(int rows, int cols) {
+  // Don't do any work if rows and cols are the same
+  if (rows == image.rows && cols == image.cols) return;
   image.create(rows, cols, CV_32FC4);
   cloud = CloudT(cols, rows);  // point cloud ctor takes width and height
+  times.clear();
   times.resize(cols, 0);
 }
 
