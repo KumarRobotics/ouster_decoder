@@ -170,9 +170,11 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
       // Consider Intensity-SLAM
       // https://arxiv.org/pdf/2102.03798.pdf
-      px.r = static_cast<uint16_t>(pt.getVector3fMap().norm() * range_scale);
+      const float r = pt.getVector3fMap().norm();
+      px.r = static_cast<uint16_t>(std::min(r * range_scale, 65535.0));
 
-      px.intensity = pf.px_reflectivity(px_buf);
+      px.intensity = std::min(pf.px_reflectivity(px_buf) / 256, 255);
+      //      px.intensity = std::min(pf.px_signal(px_buf) / 4, 255);
       pt.intensity = static_cast<float>(px.intensity);
     } else {
       pt.x = pt.y = pt.z = pt.intensity = kNaNF;

@@ -18,7 +18,7 @@ struct ImageData {
   float y{};
   float z{};
   //  float r{};
-  uint16_t r{};
+  uint16_t r{};  // raw range
   uint16_t intensity{};
 };
 
