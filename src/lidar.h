@@ -73,6 +73,7 @@ struct LidarScan {
   int icol{0};   // column index
   int iscan{0};  // subscan index
   int prev_uid{-1};
+  int num_valid{0};
   double min_range{};
   double max_range{};
   double range_scale{};

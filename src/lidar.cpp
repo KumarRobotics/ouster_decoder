@@ -93,9 +93,11 @@ void LidarScan::HardReset() noexcept {
   icol = 0;
   iscan = 0;
   prev_uid = -1;
+  num_valid = 0;
 }
 
 void LidarScan::SoftReset(int full_col) noexcept {
+  num_valid = 0;
   // Reset col (usually to 0 but in the rare case that data jumps forward
   // it will be non-zero)
   icol = icol % image.cols;
@@ -174,8 +176,9 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       px.r = static_cast<uint16_t>(std::min(r * range_scale, 65535.0));
 
       px.intensity = std::min(pf.px_reflectivity(px_buf) / 256, 255);
-      //      px.intensity = std::min(pf.px_signal(px_buf) / 4, 255);
+      // px.intensity = std::min(pf.px_signal(px_buf) / 4, 255);
       pt.intensity = static_cast<float>(px.intensity);
+      ++num_valid;  // increment valid points
     } else {
       pt.x = pt.y = pt.z = pt.intensity = kNaNF;
       px.r = px.intensity = 0;
@@ -192,6 +195,9 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
 void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   cinfo.R[0] = range_scale;
+  cinfo.binning_x = iscan;
+  cinfo.binning_y = num_valid;
+
   // Update camera info roi with curr_scan
   auto& roi = cinfo.roi;
   roi.x_offset = StartingCol();
