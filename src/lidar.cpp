@@ -176,6 +176,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       px.r = static_cast<uint16_t>(std::min(r * range_scale, 65535.0));
 
       px.intensity = std::min(pf.px_reflectivity(px_buf) / 256, 255);
+      // px.intensity = std::min(pf.px_signal(px_buf) * r * r / 256, 255.0f);
       // px.intensity = std::min(pf.px_signal(px_buf) / 4, 255);
       pt.intensity = static_cast<float>(px.intensity);
       ++num_valid;  // increment valid points
