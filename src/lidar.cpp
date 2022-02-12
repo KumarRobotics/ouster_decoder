@@ -170,13 +170,16 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       // https://github.com/ouster-lidar/ouster_example/issues/128
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
 
+      constexpr auto uint16_max = std::numeric_limits<uint16_t>::max();
+
       // Consider Intensity-SLAM
       // https://arxiv.org/pdf/2102.03798.pdf
       const float r = pt.getVector3fMap().norm();
-      px.r = static_cast<uint16_t>(std::min(r * range_scale, 65535.0));
+      px.r = static_cast<uint16_t>(
+          std::min(r * range_scale, static_cast<double>(uint16_max)));
 
-      px.intensity = std::min(pf.px_reflectivity(px_buf) / 256, 255);
-      // px.intensity = std::min(pf.px_signal(px_buf) * r * r / 256, 255.0f);
+      // px.intensity = std::min(pf.px_reflectivity(px_buf) / 256, 255);
+      px.intensity = std::min(pf.px_signal(px_buf), uint16_max);
       // px.intensity = std::min(pf.px_signal(px_buf) / 4, 255);
       pt.intensity = static_cast<float>(px.intensity);
       ++num_valid;  // increment valid points

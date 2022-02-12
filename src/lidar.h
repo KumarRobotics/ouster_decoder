@@ -17,9 +17,8 @@ struct ImageData {
   float x{};
   float y{};
   float z{};
-  //  float r{};
-  uint16_t r{};  // raw range
-  uint16_t intensity{};
+  uint16_t r{};          // raw range
+  uint16_t intensity{};  // intensity
 };
 
 static_assert(sizeof(ImageData) == sizeof(float) * 4,
