@@ -6,7 +6,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 
 find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
-                                        pcl_conversions sensor_msgs ouster_ros)
+                                        sensor_msgs ouster_ros)
 catkin_package()
 
 add_executable(ouster_decoder src/lidar.cpp src/decoder.cpp)

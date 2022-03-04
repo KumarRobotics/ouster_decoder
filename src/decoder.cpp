@@ -1,7 +1,5 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
@@ -15,6 +13,7 @@
 namespace ouster_decoder {
 
 namespace os = ouster_ros::sensor;
+namespace sm = sensor_msgs;
 
 constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
 
@@ -59,7 +58,7 @@ class Decoder {
   ros::NodeHandle pnh_;
   image_transport::ImageTransport it_;
   ros::Subscriber lidar_sub_, imu_sub_, meta_sub_;
-  ros::Publisher cloud_pub_, imu_pub_;
+  ros::Publisher cloud_pub_, cloud2_pub_, imu_pub_;
   ros::Publisher range_pub_, intensity_pub_;
   image_transport::CameraPublisher camera_pub_;
   tf2_ros::StaticTransformBroadcaster static_tf_;
@@ -68,7 +67,7 @@ class Decoder {
   // data
   LidarScan scan_;
   LidarModel model_;
-  sensor_msgs::CameraInfoPtr cinfo_msg_;
+  sm::CameraInfoPtr cinfo_msg_;
 
   // params
   double gravity_{};        // gravity
@@ -94,10 +93,10 @@ void Decoder::InitRos() {
 
   // Publishers
   camera_pub_ = it_.advertiseCamera("image", 10);
-  cloud_pub_ = pnh_.advertise<CloudT>("cloud", 10);
-  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
-  range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 1);
-  intensity_pub_ = pnh_.advertise<sensor_msgs::Image>("intensity", 1);
+  cloud2_pub_ = pnh_.advertise<sm::PointCloud2>("cloud", 10);
+  imu_pub_ = pnh_.advertise<sm::Imu>("imu", 100);
+  range_pub_ = pnh_.advertise<sm::Image>("range", 1);
+  intensity_pub_ = pnh_.advertise<sm::Image>("intensity", 1);
 
   // Frames
   sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
@@ -178,7 +177,7 @@ void Decoder::InitModel(const std::string& metadata) {
            model_.pf->pixels_per_column);
 
   // Generate partial camera info message
-  cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
+  cinfo_msg_ = boost::make_shared<sm::CameraInfo>();
   model_.UpdateCameraInfo(*cinfo_msg_);
 }
 
@@ -242,8 +241,8 @@ void Decoder::PublishAndReset() {
   }
 
   // Publish cloud
-  pcl_conversions::toPCL(header, scan_.cloud.header);
-  cloud_pub_.publish(scan_.cloud);
+  scan_.cloud2.header = header;
+  cloud2_pub_.publish(scan_.cloud2);
 
   // Increment subscan counter
   ++scan_.iscan;
@@ -347,7 +346,7 @@ void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
   const auto* buf = imu_msg.buf.data();
   const auto& pf = *model_.pf;
 
-  sensor_msgs::Imu m;
+  sm::Imu m;
   m.header.stamp.fromNSec(pf.imu_gyro_ts(buf));
   m.header.frame_id = imu_frame_;
 

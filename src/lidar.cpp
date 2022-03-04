@@ -72,7 +72,13 @@ void LidarScan::Allocate(int rows, int cols) {
   // Don't do any work if rows and cols are the same
   if (rows == image.rows && cols == image.cols) return;
   image.create(rows, cols, CV_32FC4);
-  cloud = CloudT(cols, rows);  // point cloud ctor takes width and height
+
+  cloud2.width = cols;
+  cloud2.height = rows;
+  cloud2.point_step = 16;
+  cloud2.fields = MakePointFieldsXYZI();
+  cloud2.data.resize(image.total() * cloud2.point_step);
+
   times.clear();
   times.resize(cols, 0);
 }
@@ -109,9 +115,9 @@ void LidarScan::SoftReset(int full_col) noexcept {
 }
 
 void LidarScan::InvalidateColumn(double dt_col) {
-  for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
-    auto& pt = cloud.at(icol, irow);
-    pt.x = pt.y = pt.z = kNaNF;
+  for (int irow = 0; irow < static_cast<int>(cloud2.height); ++irow) {
+    auto* ptr = CloudPtr(irow, icol);
+    ptr[0] = ptr[1] = ptr[2] = kNaNF;
   }
 
   for (int irow = 0; irow < image.rows; ++irow) {
@@ -163,32 +169,27 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     }
 
     // Set point
-    auto& pt = cloud.at(icol, ipx);
+    auto* ptr = CloudPtr(ipx, icol);
     auto& px = image.at<ImageData>(ipx, im_col);
+
     if (col_valid && min_range < range && range < max_range) {
-      pt.getVector3fMap() = model.ToPoint(range, theta_enc, ipx);
+      const auto xyz = model.ToPoint(range, theta_enc, ipx);
 
       // https://github.com/ouster-lidar/ouster_example/issues/128
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
 
-      constexpr auto uint16_max = std::numeric_limits<uint16_t>::max();
+      px.x = ptr[0] = xyz.x();
+      px.y = ptr[1] = xyz.y();
+      px.z = ptr[2] = xyz.z();
+      px.set_range(xyz.norm(), range_scale);
+      px.intensity = ptr[3] = pf.px_signal(px_buf);
 
-      // Consider Intensity-SLAM
-      // https://arxiv.org/pdf/2102.03798.pdf
-      const float r = pt.getVector3fMap().norm();
-      px.r = std::min(static_cast<uint16_t>(r * range_scale), uint16_max);
-
-      px.intensity = pf.px_signal(px_buf);
-      pt.intensity = static_cast<float>(px.intensity);
       ++num_valid;  // increment valid points
     } else {
-      pt.x = pt.y = pt.z = pt.intensity = kNaNF;
       px.r = px.intensity = 0;
+      px.x = px.y = px.z = kNaNF;
+      ptr[0] = ptr[1] = ptr[2] = kNaNF;
     }
-
-    px.x = pt.x;
-    px.y = pt.y;
-    px.z = pt.z;
   }
 
   // Move on to next column
@@ -207,6 +208,38 @@ void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   roi.width = image.cols;
   roi.height = image.rows;
   roi.do_rectify = destagger;
+}
+
+std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept {
+  using sensor_msgs::PointField;
+  std::vector<PointField> fields(4);
+
+  PointField field;
+  field.name = "x";
+  field.offset = 0;
+  field.datatype = PointField::FLOAT32;
+  field.count = 1;
+  fields.push_back(field);
+
+  field.name = "y";
+  field.offset = 4;
+  field.datatype = PointField::FLOAT32;
+  field.count = 1;
+  fields.push_back(field);
+
+  field.name = "z";
+  field.offset = 8;
+  field.datatype = PointField::FLOAT32;
+  field.count = 1;
+  fields.push_back(field);
+
+  field.name = "intensity";
+  field.offset = 12;
+  field.datatype = PointField::FLOAT32;
+  field.count = 1;
+  fields.push_back(field);
+
+  return fields;
 }
 
 }  // namespace ouster_decoder

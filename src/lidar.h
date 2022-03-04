@@ -1,6 +1,7 @@
 #pragma once
 
 #include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #include <opencv2/core/mat.hpp>
 
@@ -8,8 +9,6 @@
 
 namespace ouster_decoder {
 
-using PointT = pcl::PointXYZI;
-using CloudT = pcl::PointCloud<PointT>;
 inline constexpr double Deg2Rad(double deg) { return deg * M_PI / 180.0; }
 
 /// @brief image data in scan
@@ -21,6 +20,10 @@ struct ImageData {
   uint16_t intensity{};  // intensity
 
   static constexpr auto kMaxRangeRaw = std::numeric_limits<uint16_t>::max();
+
+  void set_range(double range, double scale) noexcept {
+    r = std::min(range * scale, static_cast<double>(kMaxRangeRaw));
+  }
 };
 
 static_assert(sizeof(ImageData) == sizeof(float) * 4,
@@ -81,8 +84,13 @@ struct LidarScan {
   bool destagger{false};
 
   cv::Mat image;
-  CloudT cloud;
+  sensor_msgs::PointCloud2 cloud2;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
+
+  float* CloudPtr(int r, int c) {
+    const auto i = r * cloud2.width + c;
+    return reinterpret_cast<float*>(cloud2.data.data() + i * cloud2.point_step);
+  }
 
   int rows() const noexcept { return image.rows; }
   int cols() const noexcept { return image.cols; }
@@ -115,5 +123,7 @@ struct LidarScan {
   /// @brief Update camera info roi data with this scan
   void UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept;
 };
+
+std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept;
 
 }  // namespace ouster_decoder
