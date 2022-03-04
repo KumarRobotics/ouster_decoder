@@ -133,13 +133,14 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
                              const LidarModel& model) {
   const auto& pf = *model.pf;
   const uint64_t t_ns = pf.col_timestamp(col_buf);
-  const uint32_t encoder = pf.col_encoder(col_buf);
+  const uint16_t mid = pf.col_measurement_id(col_buf);
   const uint32_t status = pf.col_status(col_buf);
   bool col_valid = (status == 0xffffffff);
 
   // Compute azimuth angle theta0, this should always be valid
   // const auto theta_enc = kTau - mid * model_.d_azimuth;
-  const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
+  //  const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
+  const float theta_enc = kTau - mid * model.d_azimuth;
   times.at(icol) = t_ns;
 
   for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
@@ -175,12 +176,9 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       // Consider Intensity-SLAM
       // https://arxiv.org/pdf/2102.03798.pdf
       const float r = pt.getVector3fMap().norm();
-      px.r = static_cast<uint16_t>(
-          std::min(r * range_scale, static_cast<double>(uint16_max)));
+      px.r = std::min(static_cast<uint16_t>(r * range_scale), uint16_max);
 
-      // px.intensity = std::min(pf.px_reflectivity(px_buf) / 256, 255);
-      px.intensity = std::min(pf.px_signal(px_buf), uint16_max);
-      // px.intensity = std::min(pf.px_signal(px_buf) / 4, 255);
+      px.intensity = pf.px_signal(px_buf);
       pt.intensity = static_cast<float>(px.intensity);
       ++num_valid;  // increment valid points
     } else {

@@ -19,6 +19,8 @@ struct ImageData {
   float z{};
   uint16_t r{};          // raw range
   uint16_t intensity{};  // intensity
+
+  static constexpr auto kMaxRangeRaw = std::numeric_limits<uint16_t>::max();
 };
 
 static_assert(sizeof(ImageData) == sizeof(float) * 4,

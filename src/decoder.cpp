@@ -6,7 +6,6 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
-#include <std_msgs/String.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 
 #include "lidar.h"
@@ -119,14 +118,14 @@ void Decoder::InitParams() {
   scan_.min_range = pnh_.param<double>("min_range", 0.5);
   scan_.max_range = pnh_.param<double>("max_range", 127.0);
   scan_.range_scale = pnh_.param<double>("range_scale", 512.0);
-  if (scan_.max_range * scan_.range_scale >
-      static_cast<double>(std::numeric_limits<uint16_t>::max())) {
-    throw std::domain_error("max range exceeds representation");
-  }
   ROS_INFO("Range: [%f, %f], scale: %f",
            scan_.min_range,
            scan_.max_range,
            scan_.range_scale);
+  if (scan_.max_range * scan_.range_scale >
+      static_cast<double>(ImageData::kMaxRangeRaw)) {
+    throw std::domain_error("max range exceeds representation");
+  }
 
   acc_noise_var_ = pnh_.param<double>("acc_noise_std", 0.0023);
   gyr_noise_var_ = pnh_.param<double>("gyr_noise_std", 0.00026);
@@ -281,11 +280,11 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
   const auto t0 = ros::Time::now();
   const auto* packet_buf = lidar_msg.buf.data();
   const auto& pf = *model_.pf;
+  const int fid = pf.frame_id(packet_buf);
 
   for (int col = 0; col < pf.columns_per_packet; ++col) {
     // Get column buffer
     const uint8_t* const col_buf = pf.nth_col(col, packet_buf);
-    const int fid = pf.col_frame_id(col_buf);
     const int mid = pf.col_measurement_id(col_buf);
 
     // If we set need_align to true then this will wait for mid = 0 to
