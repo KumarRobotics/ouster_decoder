@@ -1,4 +1,5 @@
 #include <cv_bridge/cv_bridge.h>
+#include <fmt/core.h>
 #include <image_transport/image_transport.h>
 #include <ros/ros.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -51,11 +52,8 @@ void Viz::CameraCb(const sm::ImageConstPtr& image_ptr,
   cv::extractChannel(mat_map, range_raw, 6);
   cv::extractChannel(mat_map, signal_raw, 7);
 
-  range_raw /= 100;
-  signal_raw /= 4;
-
-  auto range_color = ApplyCmap(range_raw, cv::COLORMAP_PINK, 0);
-  auto signal_color = ApplyCmap(signal_raw, cv::COLORMAP_PINK, 0);
+  auto range_color = ApplyCmap(range_raw / 100, cv::COLORMAP_PINK, 0);
+  auto signal_color = ApplyCmap(signal_raw / 4, cv::COLORMAP_PINK, 0);
 
   // set invalid range (0) to black
   range_color.setTo(0, range_raw == 0);
@@ -74,6 +72,12 @@ void Viz::CameraCb(const sm::ImageConstPtr& image_ptr,
       signal_color.row(r).copyTo(signal_half1.row(rr));
     }
   }
+
+  // save raw data to ouster
+  const int id = image_ptr->header.seq;
+  cv::imwrite(fmt::format("/tmp/ouster/range_{:04d}.png", id), range_raw);
+  cv::imwrite(fmt::format("/tmp/ouster/signal_{:04d}.png", id), signal_raw);
+  ROS_INFO_STREAM("Writing message with id: " << id);
 
   constexpr auto win_flags =
       cv::WINDOW_FREERATIO | cv::WINDOW_GUI_EXPANDED | cv::WINDOW_NORMAL;

@@ -254,16 +254,16 @@ void Decoder::Timing(const ros::Time& t_start) const {
   const auto t_proc = (t_end - t_start).toSec();
   const auto ratio = t_proc / model_.dt_packet;
   if (ratio > 5) {
-    ROS_WARN("Proc time: %f ms, meas time: %f ms, ratio: %f",
+    ROS_WARN("Proc time: %.4f ms, meas time: %.4f ms, ratio: %.1f%%",
              t_proc * 1e3,
              model_.dt_packet * 1e3,
-             ratio);
+             ratio * 100);
   }
   ROS_DEBUG_THROTTLE(1,
-                     "Proc time: %f ms, meas time: %f ms, ratio: %f",
+                     "Proc time: %.4f ms, meas time: %.4f ms, ratio: %.1f%%",
                      t_proc * 1e3,
                      model_.dt_packet * 1e3,
-                     ratio);
+                     ratio * 100);
 }
 
 bool Decoder::CheckAlign(int mid) {

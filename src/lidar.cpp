@@ -185,7 +185,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       const float r = xyz.norm();
       px.set_range(r, range_scale);
 
-      const auto signal = pf.px_signal(px_buf) * r / 10;
+      const auto signal = pf.px_signal(px_buf);
       px.set_intensity(signal);
       ptr[3] = signal;
 
