@@ -42,6 +42,8 @@ Viz::Viz(const ros::NodeHandle& pnh) : pnh_{pnh}, it_{pnh} {
 void Viz::CameraCb(const sm::ImageConstPtr& image_ptr,
                    const sm::CameraInfoConstPtr& cinfo_ptr) {
   const auto mat = cv_bridge::toCvShare(image_ptr)->image;
+  const auto h = mat.rows;
+  const auto w = mat.cols;
 
   // Extract range and intensity
   const cv::Mat mat_map(mat.rows, mat.cols, CV_16UC(8), mat.data);
@@ -50,20 +52,44 @@ void Viz::CameraCb(const sm::ImageConstPtr& image_ptr,
   cv::extractChannel(mat_map, signal_raw, 7);
 
   range_raw /= 100;
-  signal_raw /= 2;
+  signal_raw /= 4;
 
-  auto signal_color = ApplyCmap(signal_raw, cv::COLORMAP_PINK, 0);
   auto range_color = ApplyCmap(range_raw, cv::COLORMAP_PINK, 0);
+  auto signal_color = ApplyCmap(signal_raw, cv::COLORMAP_PINK, 0);
 
   // set invalid range (0) to black
   range_color.setTo(0, range_raw == 0);
+  signal_color.setTo(0, range_raw == 0);
+
+  cv::Mat signal_half0;
+  cv::Mat signal_half1;
+  signal_half0.create(h / 2, w, CV_8UC3);
+  signal_half1.create(h / 2, w, CV_8UC3);
+
+  for (int r = 0; r < h; ++r) {
+    const int rr = r / 2;
+    if (r % 2 == 0) {
+      signal_color.row(r).copyTo(signal_half0.row(rr));
+    } else {
+      signal_color.row(r).copyTo(signal_half1.row(rr));
+    }
+  }
 
   constexpr auto win_flags =
       cv::WINDOW_FREERATIO | cv::WINDOW_GUI_EXPANDED | cv::WINDOW_NORMAL;
+
   cv::namedWindow("range", win_flags);
   cv::imshow("range", range_color);
-  cv::namedWindow("intensity", win_flags);
-  cv::imshow("intensity", signal_color);
+
+  cv::namedWindow("signal", win_flags);
+  cv::imshow("signal", signal_color);
+
+  cv::namedWindow("signal_half0", win_flags);
+  cv::imshow("signal_half0", signal_half0);
+
+  cv::namedWindow("signal_half1", win_flags);
+  cv::imshow("signal_half1", signal_half1);
+
   cv::waitKey(1);
 }
 
