@@ -19,10 +19,14 @@ struct ImageData {
   uint16_t r{};          // raw range
   uint16_t intensity{};  // intensity
 
-  static constexpr auto kMaxRangeRaw = std::numeric_limits<uint16_t>::max();
+  static constexpr auto kMaxUint16 = std::numeric_limits<uint16_t>::max();
 
   void set_range(double range, double scale) noexcept {
-    r = std::min(range * scale, static_cast<double>(kMaxRangeRaw));
+    r = std::min(range * scale, static_cast<double>(kMaxUint16));
+  }
+
+  void set_intensity(double signal) noexcept {
+    intensity = std::min(signal, static_cast<double>(kMaxUint16));
   }
 };
 

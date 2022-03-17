@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 
+find_package(OpenCV REQUIRED)
 find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
                                         sensor_msgs ouster_ros)
 catkin_package()
@@ -17,3 +18,7 @@ enable_warnings(ouster_decoder)
 add_executable(ouster_driver src/driver.cpp)
 target_include_directories(ouster_driver PRIVATE ${catkin_INCLUDE_DIRS})
 target_link_libraries(ouster_driver PRIVATE ${catkin_LIBRARIES})
+
+add_executable(ouster_viz src/viz.cpp)
+target_include_directories(ouster_viz PRIVATE ${catkin_INCLUDE_DIRS})
+target_link_libraries(ouster_viz PRIVATE ${catkin_LIBRARIES} opencv_highgui)

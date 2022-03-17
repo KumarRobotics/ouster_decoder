@@ -21,7 +21,6 @@ constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
 class Decoder {
  public:
   explicit Decoder(const ros::NodeHandle& pnh);
-  ~Decoder() noexcept = default;
 
   // No copy no move
   Decoder(const Decoder&) = delete;
@@ -122,7 +121,7 @@ void Decoder::InitParams() {
            scan_.max_range,
            scan_.range_scale);
   if (scan_.max_range * scan_.range_scale >
-      static_cast<double>(ImageData::kMaxRangeRaw)) {
+      static_cast<double>(ImageData::kMaxUint16)) {
     throw std::domain_error("max range exceeds representation");
   }
 

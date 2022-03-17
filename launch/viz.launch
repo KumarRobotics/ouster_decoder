@@ -1,0 +1,12 @@
+<launch>
+    <arg name="debug" default="false"/>
+    <env if="$(arg debug)" name="ROSCONSOLE_CONFIG_FILE" value="$(find ouster_decoder)/launch/debug.conf"/>
+
+    <arg name="lidar_ns" default="os_node"/>
+    <arg name="driver_ns" default="/os_node"/>
+
+    <node pkg="ouster_decoder" name="os_viz" type="ouster_viz" output="screen" ns="$(arg lidar_ns)">
+        <remap from="~image" to="image"/>
+        <remap from="~camera_info" to="camera_info"/>
+    </node>
+</launch>

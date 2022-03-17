@@ -22,3 +22,4 @@ src/model.cpp
 src/model_test.cpp
 src/utils.h
 src/utils_test.cpp
+src/viz.cpp

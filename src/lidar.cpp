@@ -163,9 +163,9 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       // if it is outside the current subscan, we set this pixel invalid
       if (im_col < 0 || im_col >= cols()) {
         col_valid = false;
-        // make sure index is within bound
-        im_col = im_col % cols();
       }
+      // make sure index is within bound
+      im_col = im_col % cols();
     }
 
     // Set point
@@ -181,8 +181,13 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       px.x = ptr[0] = xyz.x();
       px.y = ptr[1] = xyz.y();
       px.z = ptr[2] = xyz.z();
-      px.set_range(xyz.norm(), range_scale);
-      px.intensity = ptr[3] = pf.px_signal(px_buf);
+
+      const float r = xyz.norm();
+      px.set_range(r, range_scale);
+
+      const auto signal = pf.px_signal(px_buf);
+      px.set_intensity(signal);
+      ptr[3] = signal;
 
       ++num_valid;  // increment valid points
     } else {
