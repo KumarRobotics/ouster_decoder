@@ -73,11 +73,11 @@ void LidarScan::Allocate(int rows, int cols) {
   if (rows == image.rows && cols == image.cols) return;
   image.create(rows, cols, CV_32FC4);
 
-  cloud2.width = cols;
-  cloud2.height = rows;
-  cloud2.point_step = 16;
-  cloud2.fields = MakePointFieldsXYZI();
-  cloud2.data.resize(image.total() * cloud2.point_step);
+  cloud.width = cols;
+  cloud.height = rows;
+  cloud.point_step = 16;
+  cloud.fields = MakePointFieldsXYZI();
+  cloud.data.resize(image.total() * cloud.point_step);
 
   times.clear();
   times.resize(cols, 0);
@@ -115,7 +115,7 @@ void LidarScan::SoftReset(int full_col) noexcept {
 }
 
 void LidarScan::InvalidateColumn(double dt_col) {
-  for (int irow = 0; irow < static_cast<int>(cloud2.height); ++irow) {
+  for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
     auto* ptr = CloudPtr(irow, icol);
     ptr[0] = ptr[1] = ptr[2] = kNaNF;
   }
@@ -178,21 +178,25 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       // https://github.com/ouster-lidar/ouster_example/issues/128
       // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
 
-      px.x = ptr[0] = xyz.x();
-      px.y = ptr[1] = xyz.y();
-      px.z = ptr[2] = xyz.z();
+      px.x = xyz.x();
+      px.y = xyz.y();
+      px.z = xyz.z();
+
+      ptr[0] = xyz.x();
+      ptr[1] = xyz.y();
+      ptr[2] = xyz.z();
 
       const float r = xyz.norm();
       px.set_range(r, range_scale);
 
       const auto signal = pf.px_signal(px_buf);
-      px.set_intensity(signal);
+      px.set_signal(signal);
       ptr[3] = signal;
 
       ++num_valid;  // increment valid points
     } else {
-      px.r = px.intensity = 0;
       px.x = px.y = px.z = kNaNF;
+      px.range_raw = px.signal_raw = 0;
       ptr[0] = ptr[1] = ptr[2] = kNaNF;
     }
   }

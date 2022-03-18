@@ -16,17 +16,17 @@ struct ImageData {
   float x{};
   float y{};
   float z{};
-  uint16_t r{};          // raw range
-  uint16_t intensity{};  // intensity
+  uint16_t range_raw{};
+  uint16_t signal_raw{};
 
   static constexpr auto kMaxUint16 = std::numeric_limits<uint16_t>::max();
 
   void set_range(double range, double scale) noexcept {
-    r = std::min(range * scale, static_cast<double>(kMaxUint16));
+    range_raw = std::min(range * scale, static_cast<double>(kMaxUint16));
   }
 
-  void set_intensity(double signal) noexcept {
-    intensity = std::min(signal, static_cast<double>(kMaxUint16));
+  void set_signal(double signal) noexcept {
+    signal_raw = std::min(signal, static_cast<double>(kMaxUint16));
   }
 };
 
@@ -88,12 +88,12 @@ struct LidarScan {
   bool destagger{false};
 
   cv::Mat image;
-  sensor_msgs::PointCloud2 cloud2;
+  sensor_msgs::PointCloud2 cloud;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
   float* CloudPtr(int r, int c) {
-    const auto i = r * cloud2.width + c;
-    return reinterpret_cast<float*>(cloud2.data.data() + i * cloud2.point_step);
+    const auto i = r * cloud.width + c;
+    return reinterpret_cast<float*>(cloud.data.data() + i * cloud.point_step);
   }
 
   int rows() const noexcept { return image.rows; }

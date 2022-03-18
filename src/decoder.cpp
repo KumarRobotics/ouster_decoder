@@ -57,8 +57,8 @@ class Decoder {
   ros::NodeHandle pnh_;
   image_transport::ImageTransport it_;
   ros::Subscriber lidar_sub_, imu_sub_, meta_sub_;
-  ros::Publisher cloud_pub_, cloud2_pub_, imu_pub_;
-  ros::Publisher range_pub_, intensity_pub_;
+  ros::Publisher cloud_pub_, imu_pub_;
+  ros::Publisher range_pub_, signal_pub_;
   image_transport::CameraPublisher camera_pub_;
   tf2_ros::StaticTransformBroadcaster static_tf_;
   std::string sensor_frame_, lidar_frame_, imu_frame_;
@@ -92,10 +92,10 @@ void Decoder::InitRos() {
 
   // Publishers
   camera_pub_ = it_.advertiseCamera("image", 10);
-  cloud2_pub_ = pnh_.advertise<sm::PointCloud2>("cloud", 10);
+  cloud_pub_ = pnh_.advertise<sm::PointCloud2>("cloud", 10);
   imu_pub_ = pnh_.advertise<sm::Imu>("imu", 100);
-  range_pub_ = pnh_.advertise<sm::Image>("range", 1);
-  intensity_pub_ = pnh_.advertise<sm::Image>("intensity", 1);
+  range_pub_ = pnh_.advertise<sm::Image>("range", 5);
+  signal_pub_ = pnh_.advertise<sm::Image>("signal", 5);
 
   // Frames
   sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
@@ -218,9 +218,9 @@ void Decoder::PublishAndReset() {
 
   // Publish range image on demand
   if (range_pub_.getNumSubscribers() > 0 ||
-      intensity_pub_.getNumSubscribers() > 0) {
+      signal_pub_.getNumSubscribers() > 0) {
     // cast image as 8 channel short so that we can extract the last 2 as range
-    // and intensity
+    // and signal
     cv::Mat image_ushort(
         scan_.image.rows, scan_.image.cols, CV_16UC(8), scan_.image.data);
 
@@ -231,17 +231,19 @@ void Decoder::PublishAndReset() {
           cv_bridge::CvImage(header, "16UC1", range).toImageMsg());
     }
 
-    if (intensity_pub_.getNumSubscribers() > 0) {
-      cv::Mat intensity;
-      cv::extractChannel(image_ushort, intensity, 7);
-      intensity_pub_.publish(
-          cv_bridge::CvImage(header, "16UC1", intensity).toImageMsg());
+    if (signal_pub_.getNumSubscribers() > 0) {
+      cv::Mat signal;
+      cv::extractChannel(image_ushort, signal, 7);
+      signal_pub_.publish(
+          cv_bridge::CvImage(header, "16UC1", signal).toImageMsg());
     }
   }
 
   // Publish cloud
-  scan_.cloud2.header = header;
-  cloud2_pub_.publish(scan_.cloud2);
+  if (cloud_pub_.getNumSubscribers() > 0) {
+    scan_.cloud.header = header;
+    cloud_pub_.publish(scan_.cloud);
+  }
 
   // Increment subscan counter
   ++scan_.iscan;
