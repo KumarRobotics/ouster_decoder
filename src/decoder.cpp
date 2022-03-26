@@ -189,6 +189,9 @@ void Decoder::InitScan(const LidarModel& model) {
         " / " + std::to_string(num_subscans));
   }
 
+  // Each block has 16 cols, make sure we dont divide into anything smaller
+  num_subscans = std::min(num_subscans, model.cols / 16);
+
   const int subscan_cols = model.cols / num_subscans;
   ROS_INFO("Subscan %d x %d, total %d", model.rows, subscan_cols, num_subscans);
   scan_.Allocate(model.rows, subscan_cols);
