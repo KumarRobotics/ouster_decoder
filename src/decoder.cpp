@@ -224,19 +224,19 @@ void Decoder::PublishAndReset() {
       signal_pub_.getNumSubscribers() > 0) {
     // cast image as 8 channel short so that we can extract the last 2 as range
     // and signal
-    cv::Mat image_ushort(
+    cv::Mat image16u(
         scan_.image.rows, scan_.image.cols, CV_16UC(8), scan_.image.data);
 
     if (range_pub_.getNumSubscribers() > 0) {
       cv::Mat range;
-      cv::extractChannel(image_ushort, range, 6);
+      cv::extractChannel(image16u, range, 6);
       range_pub_.publish(
           cv_bridge::CvImage(header, "16UC1", range).toImageMsg());
     }
 
     if (signal_pub_.getNumSubscribers() > 0) {
       cv::Mat signal;
-      cv::extractChannel(image_ushort, signal, 7);
+      cv::extractChannel(image16u, signal, 7);
       signal_pub_.publish(
           cv_bridge::CvImage(header, "16UC1", signal).toImageMsg());
     }

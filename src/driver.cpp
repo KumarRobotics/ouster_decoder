@@ -44,17 +44,22 @@ void populate_metadata_defaults(sensor::sensor_info& info,
 }
 
 // try to write metadata file
-void write_metadata(const std::string& meta_file, const std::string& metadata) {
+bool write_metadata(const std::string& meta_file, const std::string& metadata) {
   std::ofstream ofs;
   ofs.open(meta_file);
   ofs << metadata << std::endl;
   ofs.close();
   if (ofs) {
-    ROS_INFO("Wrote metadata to $ROS_HOME/%s", meta_file.c_str());
+    ROS_INFO("Wrote metadata to %s", meta_file.c_str());
   } else {
-    ROS_WARN("Failed to write metadata to %s; check that the path is valid",
-             meta_file.c_str());
+    ROS_WARN(
+        "Failed to write metadata to %s; check that the path is valid. If "
+        "you provided a relative path, please note that the working "
+        "directory of all ROS nodes is set by default to $ROS_HOME",
+        meta_file.c_str());
+    return false;
   }
+  return true;
 }
 
 int connection_loop(ros::NodeHandle& nh,
@@ -134,14 +139,27 @@ int main(int argc, char** argv) {
   auto lidar_mode_arg = nh.param("lidar_mode", std::string{});
   auto timestamp_mode_arg = nh.param("timestamp_mode", std::string{});
 
-  // fall back to metadata file name based on hostname, if available
-  auto meta_file = nh.param("metadata", std::string{});
-  // if (!meta_file.size() && hostname.size()) meta_file = hostname + ".json";
+  std::string udp_profile_lidar_arg;
+  nh.param<std::string>("udp_profile_lidar", udp_profile_lidar_arg, "");
+
+  //   optional<sensor::UDPProfileLidar> udp_profile_lidar;
+  //   if (udp_profile_lidar_arg.size()) {
+  //     if (replay)
+  //       ROS_WARN("UDP Profile Lidar set in replay mode. Will be ignored.");
+
+  //     // set lidar profile from param
+  //     udp_profile_lidar =
+  //         sensor::udp_profile_lidar_of_string(udp_profile_lidar_arg);
+  //     if (!udp_profile_lidar) {
+  //       ROS_ERROR("Invalid udp profile lidar: %s",
+  //       udp_profile_lidar_arg.c_str()); return EXIT_FAILURE;
+  //     }
+  //   }
 
   // set lidar mode from param
   sensor::lidar_mode lidar_mode = sensor::MODE_UNSPEC;
   if (lidar_mode_arg.size()) {
-    if (replay) ROS_WARN("Lidar mode set in replay mode. May be ignored");
+    if (replay) ROS_WARN("Lidar mode set in replay mode. Will be ignored");
 
     lidar_mode = sensor::lidar_mode_of_string(lidar_mode_arg);
     if (!lidar_mode) {
@@ -161,6 +179,10 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
   }
+
+  // fall back to metadata file name based on hostname, if available
+  auto meta_file = nh.param("metadata", std::string{});
+  // if (!meta_file.size() && hostname.size()) meta_file = hostname + ".json";
 
   if (!replay && (!hostname.size() || !udp_dest.size())) {
     ROS_ERROR("Must specify both hostname and udp destination");
@@ -198,11 +220,11 @@ int main(int argc, char** argv) {
       ROS_ERROR("Error when running in replay mode: %s", e.what());
     }
   } else {
-    ROS_INFO("Connecting to %s; sending data to %s",
-             hostname.c_str(),
-             udp_dest.c_str());
-    ROS_INFO("Waiting for sensor to initialize ...");
+    ROS_INFO("Waiting for sensor %s to initialize ...", hostname.c_str());
+    ROS_INFO("Sending data to %s", udp_dest.c_str());
 
+    // use no-config version of init_client to allow for random ports
+    // auto cli = sensor::init_client(hostname, lidar_port, imu_port);
     auto cli = sensor::init_client(
         hostname, udp_dest, lidar_mode, timestamp_mode, lidar_port, imu_port);
 
@@ -219,11 +241,18 @@ int main(int argc, char** argv) {
       ROS_INFO("meta_file not given, use: %s", meta_file.c_str());
     }
 
+    // write metadata file. If metadata_path is relative, will use cwd
+    // (usually ~/.ros)
+    if (!write_metadata(meta_file, metadata)) {
+      ROS_ERROR("Exiting because of failure to write metadata path to %s",
+                meta_file.c_str());
+      return EXIT_FAILURE;
+    }
+
     // populate sensor info
     auto info = sensor::parse_metadata(metadata);
     populate_metadata_defaults(info, sensor::MODE_UNSPEC);
-    metadata = to_string(info);           // regenerate metadata
-    write_metadata(meta_file, metadata);  // write to disk
+    metadata = to_string(info);  // regenerate metadata
 
     // publish metadata
     pub_meta = nh.advertise<std_msgs::String>("metadata", 1, true);

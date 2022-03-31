@@ -181,16 +181,14 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       px.x = xyz.x();
       px.y = xyz.y();
       px.z = xyz.z();
+      const float r = xyz.norm();
+      px.set_range(r, range_scale);
+      const auto signal = pf.px_signal(px_buf);
+      px.set_signal(signal);
 
       ptr[0] = xyz.x();
       ptr[1] = xyz.y();
       ptr[2] = xyz.z();
-
-      const float r = xyz.norm();
-      px.set_range(r, range_scale);
-
-      const auto signal = pf.px_signal(px_buf);
-      px.set_signal(signal);
       ptr[3] = signal;
 
       ++num_valid;  // increment valid points
