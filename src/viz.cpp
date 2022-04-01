@@ -75,8 +75,9 @@ void Viz::CameraCb(const sm::ImageConstPtr& image_ptr,
 
   // save raw data to ouster
   const int id = image_ptr->header.seq;
-  cv::imwrite(fmt::format("/tmp/ouster/range_{:04d}.png", id), range_raw);
-  cv::imwrite(fmt::format("/tmp/ouster/signal_{:04d}.png", id), signal_raw);
+  const std::vector<int> png_flags = {cv::IMWRITE_PNG_COMPRESSION, 0};
+  cv::imwrite(fmt::format("/tmp/ouster/range_{:04d}.png", id), range_raw, png_flags);
+  cv::imwrite(fmt::format("/tmp/ouster/signal_{:04d}.png", id), signal_raw, png_flags);
   ROS_INFO_STREAM("Writing message with id: " << id);
 
   constexpr auto win_flags =
