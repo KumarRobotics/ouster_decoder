@@ -71,6 +71,6 @@
         <remap from="~image" to="image"/>
         <remap from="~camera_info" to="camera_info"/>
         <remap from="~range" to="range"/>
-        <remap from="~intensity" to="intensity"/>
+        <remap from="~signal" to="signal"/>
     </node>
 </launch>
