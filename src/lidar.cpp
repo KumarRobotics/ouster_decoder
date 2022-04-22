@@ -114,7 +114,7 @@ void LidarScan::SoftReset(int full_col) noexcept {
   }
 }
 
-void LidarScan::InvalidateColumn(double dt_col) {
+void LidarScan::InvalidateColumn(double dt_col) noexcept {
   for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
     auto* ptr = CloudPtr(irow, icol);
     ptr[0] = ptr[1] = ptr[2] = kNaNF;
@@ -150,52 +150,44 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
   times.at(icol) = t_ns;
 
   for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
-    const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
-    const auto raw_range = pf.px_range(px_buf);
-    const float range = raw_range * kMmToM;
+    // Data to fill
+    Eigen::Vector3f xyz;
+    xyz.setConstant(kNaNF);
+    float r{};
+    uint16_t s16u{};
 
-    // im_col is where the pixel should go in the image
-    // it is the same as icol when we are not in staggered mode
-    int im_col = icol;
-    if (destagger) {
-      // add pixel shift to get where the pixel should be
-      im_col += model.pixel_shifts()[ipx];
-      // if it is outside the current subscan, we set this pixel invalid
-      if (im_col < 0 || im_col >= cols()) {
-        col_valid = false;
+    if (col_valid) {
+      const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
+      const auto raw_range = pf.px_range(px_buf);
+      const float range = raw_range * kMmToM;  // used to compute xyz
+
+      if (min_range <= range && range <= max_range) {
+        xyz = model.ToPoint(range, theta_enc, ipx);
+        r = xyz.norm();  // we compute range ourselves
+        s16u = pf.px_signal(px_buf);
+        ++num_valid;
       }
-      // make sure index is within bound
-      im_col = im_col % cols();
     }
 
-    // Set point
+    // Now we set cloud and image data
+    // There is no destagger for cloud, so we update point no matter what
     auto* ptr = CloudPtr(ipx, icol);
-    auto& px = image.at<ImageData>(ipx, im_col);
+    ptr[0] = xyz.x();
+    ptr[1] = xyz.y();
+    ptr[2] = xyz.z();
+    ptr[3] = static_cast<float>(s16u);
 
-    if (col_valid && min_range < range && range < max_range) {
-      const auto xyz = model.ToPoint(range, theta_enc, ipx);
+    // However image can be destaggered, and pixel can go out of bound
+    // add pixel shift to get where the pixel should be
+    const auto im_col = destagger ? icol + model.pixel_shifts()[ipx] : icol;
 
-      // https://github.com/ouster-lidar/ouster_example/issues/128
-      // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
-
+    if (0 <= im_col || im_col < cols()) {
+      auto& px = image.at<ImageData>(ipx, im_col);
       px.x = xyz.x();
       px.y = xyz.y();
       px.z = xyz.z();
-      const float r = xyz.norm();
       px.set_range(r, range_scale);
-      const auto signal = pf.px_signal(px_buf);
-      px.set_signal(signal);
-
-      ptr[0] = xyz.x();
-      ptr[1] = xyz.y();
-      ptr[2] = xyz.z();
-      ptr[3] = signal;
-
-      ++num_valid;  // increment valid points
-    } else {
-      px.x = px.y = px.z = kNaNF;
-      px.range_raw = px.signal_raw = 0;
-      ptr[0] = ptr[1] = ptr[2] = kNaNF;
+      px.set_signal(s16u);
     }
   }
 

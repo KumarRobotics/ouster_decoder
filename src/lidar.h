@@ -16,17 +16,17 @@ struct ImageData {
   float x{};
   float y{};
   float z{};
-  uint16_t range_raw{};
-  uint16_t signal_raw{};
+  uint16_t r16u{};
+  uint16_t s16u{};
 
   static constexpr auto kMaxUint16 = std::numeric_limits<uint16_t>::max();
 
   void set_range(double range, double scale) noexcept {
-    range_raw = std::min(range * scale, static_cast<double>(kMaxUint16));
+    r16u = std::min(range * scale, static_cast<double>(kMaxUint16));
   }
 
   void set_signal(double signal) noexcept {
-    signal_raw = std::min(signal, static_cast<double>(kMaxUint16));
+    s16u = std::min(signal, static_cast<double>(kMaxUint16));
   }
 };
 
@@ -91,7 +91,7 @@ struct LidarScan {
   sensor_msgs::PointCloud2 cloud;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
-  float* CloudPtr(int r, int c) {
+  float* CloudPtr(int r, int c) noexcept {
     const auto i = r * cloud.width + c;
     return reinterpret_cast<float*>(cloud.data.data() + i * cloud.point_step);
   }
@@ -119,7 +119,7 @@ struct LidarScan {
   void SoftReset(int full_col) noexcept;
 
   /// @brief Invalidate an entire column
-  void InvalidateColumn(double dt_col);
+  void InvalidateColumn(double dt_col) noexcept;
 
   /// @brief Decode column
   void DecodeColumn(const uint8_t* const col_buf, const LidarModel& model);
