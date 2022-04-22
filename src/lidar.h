@@ -21,12 +21,13 @@ struct ImageData {
 
   static constexpr auto kMaxUint16 = std::numeric_limits<uint16_t>::max();
 
-  void set_range(double range, double scale) noexcept {
+  void set_range(float range, double scale) noexcept {
     r16u = std::min(range * scale, static_cast<double>(kMaxUint16));
   }
 
-  void set_signal(double signal) noexcept {
-    s16u = std::min(signal, static_cast<double>(kMaxUint16));
+  void set_bad() noexcept {
+    x = y = z = std::numeric_limits<float>::quiet_NaN();
+    r16u = s16u = 0;
   }
 };
 
@@ -91,7 +92,7 @@ struct LidarScan {
   sensor_msgs::PointCloud2 cloud;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
-  float* CloudPtr(int r, int c) noexcept {
+  float* CloudPtr(int r, int c) {
     const auto i = r * cloud.width + c;
     return reinterpret_cast<float*>(cloud.data.data() + i * cloud.point_step);
   }

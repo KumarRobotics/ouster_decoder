@@ -179,15 +179,19 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
     // However image can be destaggered, and pixel can go out of bound
     // add pixel shift to get where the pixel should be
-    const auto im_col = destagger ? icol + model.pixel_shifts()[ipx] : icol;
+    const auto col_shift = model.pixel_shifts()[ipx];
+    const auto im_col = destagger ? icol + col_shift : icol;
 
-    if (0 <= im_col || im_col < cols()) {
+    if (0 <= im_col && im_col < cols()) {
       auto& px = image.at<ImageData>(ipx, im_col);
       px.x = xyz.x();
       px.y = xyz.y();
       px.z = xyz.z();
       px.set_range(r, range_scale);
-      px.set_signal(s16u);
+      px.s16u = s16u;
+    } else {
+      auto& px = image.at<ImageData>(ipx, im_col % cols());
+      px.set_bad();
     }
   }
 
