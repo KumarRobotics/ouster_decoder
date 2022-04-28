@@ -76,7 +76,9 @@ void LidarScan::Allocate(int rows, int cols) {
   cloud.width = cols;
   cloud.height = rows;
   cloud.point_step = 16;
+  cloud.row_step = cloud.point_step * cloud.width;
   cloud.fields = MakePointFieldsXYZI();
+  cloud.is_dense = true;
   cloud.data.resize(image.total() * cloud.point_step);
 
   times.clear();
@@ -219,7 +221,8 @@ void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
 
 std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept {
   using sensor_msgs::PointField;
-  std::vector<PointField> fields(4);
+  std::vector<PointField> fields;
+  fields.reserve(4);
 
   PointField field;
   field.name = "x";
