@@ -121,7 +121,7 @@ void Decoder::InitParams() {
            scan_.max_range,
            scan_.range_scale);
   if (scan_.max_range * scan_.range_scale >
-      static_cast<double>(ImageData::kMaxUint16)) {
+      static_cast<double>(std::numeric_limits<uint16_t>::max())) {
     throw std::domain_error("max range exceeds representation");
   }
 
