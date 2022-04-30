@@ -19,10 +19,10 @@ struct ImageData {
   uint16_t r16u{};
   uint16_t s16u{};
 
-  static constexpr auto kMaxUint16 = std::numeric_limits<uint16_t>::max();
-
   void set_range(float range, double scale) noexcept {
-    r16u = std::min(range * scale, static_cast<double>(kMaxUint16));
+    r16u = static_cast<uint16_t>(
+        std::min(range * scale,
+                 static_cast<double>(std::numeric_limits<uint16_t>::max())));
   }
 
   void set_bad() noexcept {
