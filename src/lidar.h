@@ -1,6 +1,7 @@
 #pragma once
 
 #include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
 
 #include <opencv2/core/mat.hpp>
@@ -88,17 +89,24 @@ struct LidarScan {
   double range_scale{};
   bool destagger{false};
 
-  cv::Mat image;
+  //  cv::Mat image;
+  sensor_msgs::ImagePtr image_ptr;
   sensor_msgs::PointCloud2 cloud;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
   float* CloudPtr(int r, int c) {
-    const auto i = r * cloud.width + c;
+    const auto i = r * cols() + c;
     return reinterpret_cast<float*>(cloud.data.data() + i * cloud.point_step);
   }
 
-  int rows() const noexcept { return image.rows; }
-  int cols() const noexcept { return image.cols; }
+  ImageData* ImagePtr(int r, int c) {
+    const auto i = r * cols() + c;
+    return reinterpret_cast<ImageData*>(image_ptr->data.data() +
+                                        i * sizeof(ImageData));
+  }
+
+  int rows() const noexcept { return static_cast<int>(cloud.height); }
+  int cols() const noexcept { return static_cast<int>(cloud.width); }
 
   /// @brief whether this scan is full
   bool IsFull() const noexcept { return icol >= cols(); }

@@ -1,5 +1,7 @@
 #include "lidar.h"
 
+#include <boost/make_shared.hpp>
+
 namespace ouster_decoder {
 
 namespace os = ouster_ros::sensor;
@@ -70,8 +72,16 @@ void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
 
 void LidarScan::Allocate(int rows, int cols) {
   // Don't do any work if rows and cols are the same
-  if (rows == image.rows && cols == image.cols) return;
-  image.create(rows, cols, CV_32FC4);
+  //  image.create(rows, cols, CV_32FC4);
+  if (image_ptr == nullptr) {
+    image_ptr = boost::make_shared<sensor_msgs::Image>();
+  }
+
+  image_ptr->height = rows;
+  image_ptr->width = cols;
+  image_ptr->encoding = "32FC4";
+  image_ptr->step = cols * sizeof(ImageData);
+  image_ptr->data.resize(rows * cols * sizeof(ImageData));
 
   cloud.width = cols;
   cloud.height = rows;
@@ -79,7 +89,7 @@ void LidarScan::Allocate(int rows, int cols) {
   cloud.row_step = cloud.point_step * cloud.width;
   cloud.fields = MakePointFieldsXYZI();
   cloud.is_dense = true;
-  cloud.data.resize(image.total() * cloud.point_step);
+  cloud.data.resize(rows * cols * cloud.point_step);
 
   times.clear();
   times.resize(cols, 0);
@@ -108,10 +118,10 @@ void LidarScan::SoftReset(int full_col) noexcept {
   num_valid = 0;
   // Reset col (usually to 0 but in the rare case that data jumps forward
   // it will be non-zero)
-  icol = icol % image.cols;
+  icol = icol % cols();
 
   // Reset scan if we have a full sweep
-  if (iscan * image.cols >= full_col) {
+  if (iscan * cols() >= full_col) {
     iscan = 0;
   }
 }
@@ -122,9 +132,11 @@ void LidarScan::InvalidateColumn(double dt_col) noexcept {
     ptr[0] = ptr[1] = ptr[2] = kNaNF;
   }
 
-  for (int irow = 0; irow < image.rows; ++irow) {
-    auto& px = image.at<cv::Vec4f>(irow, icol);
-    px[0] = px[1] = px[2] = px[3] = kNaNF;
+  for (int irow = 0; irow < rows(); ++irow) {
+    auto* ptr = ImagePtr(irow, icol);
+    ptr->set_bad();
+    //    auto& px = image.at<cv::Vec4f>(irow, icol);
+    //    px[0] = px[1] = px[2] = px[3] = kNaNF;
   }
 
   // It is possible that the jump spans two subscans, this will cause the
@@ -173,11 +185,11 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
     // Now we set cloud and image data
     // There is no destagger for cloud, so we update point no matter what
-    auto* ptr = CloudPtr(ipx, icol);
-    ptr[0] = xyz.x();
-    ptr[1] = xyz.y();
-    ptr[2] = xyz.z();
-    ptr[3] = static_cast<float>(s16u);
+    auto* cptr = CloudPtr(ipx, icol);
+    cptr[0] = xyz.x();
+    cptr[1] = xyz.y();
+    cptr[2] = xyz.z();
+    cptr[3] = static_cast<float>(s16u);
 
     // However image can be destaggered, and pixel can go out of bound
     // add pixel shift to get where the pixel should be
@@ -185,15 +197,23 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     const auto im_col = destagger ? icol + col_shift : icol;
 
     if (0 <= im_col && im_col < cols()) {
-      auto& px = image.at<ImageData>(ipx, im_col);
-      px.x = xyz.x();
-      px.y = xyz.y();
-      px.z = xyz.z();
-      px.set_range(r, range_scale);
-      px.s16u = s16u;
+      //      auto& px = image.at<ImageData>(ipx, im_col);
+      //      px.x = xyz.x();
+      //      px.y = xyz.y();
+      //      px.z = xyz.z();
+      //      px.set_range(r, range_scale);
+      //      px.s16u = s16u;
+      auto* iptr = ImagePtr(ipx, im_col);
+      iptr->x = xyz.x();
+      iptr->y = xyz.y();
+      iptr->z = xyz.z();
+      iptr->set_range(r, range_scale);
+      iptr->s16u = s16u;
     } else {
-      auto& px = image.at<ImageData>(ipx, im_col % cols());
-      px.set_bad();
+      auto* iptr = ImagePtr(ipx, im_col % cols());
+      iptr->set_bad();
+      //      auto& px = image.at<ImageData>(ipx, im_col % cols());
+      //      px.set_bad();
     }
   }
 
@@ -210,8 +230,8 @@ void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   auto& roi = cinfo.roi;
   roi.x_offset = StartingCol();
   roi.y_offset = 0;
-  roi.width = image.cols;
-  roi.height = image.rows;
+  roi.width = cols();
+  roi.height = rows();
   roi.do_rectify = destagger;
 }
 

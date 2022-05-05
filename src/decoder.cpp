@@ -212,20 +212,22 @@ void Decoder::PublishAndReset() {
   // Publish image and camera_info
   // cinfo stores information about the full sweep, while roi stores information
   // about the subscan
-  const auto image_msg =
-      cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
-  cinfo_msg_->header = header;
-  // Update camera info roi with scan
-  scan_.UpdateCinfo(*cinfo_msg_);
-  camera_pub_.publish(image_msg, cinfo_msg_);
+  if (camera_pub_.getNumSubscribers() > 0) {
+    // const auto image_msg =
+    //     cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
+    cinfo_msg_->header = header;
+    // Update camera info roi with scan
+    scan_.UpdateCinfo(*cinfo_msg_);
+    camera_pub_.publish(scan_.image_ptr, cinfo_msg_);
+  }
 
   // Publish range image on demand
   if (range_pub_.getNumSubscribers() > 0 ||
       signal_pub_.getNumSubscribers() > 0) {
     // cast image as 8 channel short so that we can extract the last 2 as range
     // and signal
-    cv::Mat image16u(
-        scan_.image.rows, scan_.image.cols, CV_16UC(8), scan_.image.data);
+    const auto image = cv_bridge::toCvShare(scan_.image_ptr)->image;
+    const cv::Mat image16u(scan_.rows(), scan_.cols(), CV_16UC(8), image.data);
 
     if (range_pub_.getNumSubscribers() > 0) {
       cv::Mat range;
