@@ -41,7 +41,7 @@ class Decoder {
   void SendTransform(const LidarModel& model);
 
   /// Whether we are still waiting for alignment to mid 0
-  [[nodiscard]] bool CheckAlign(int mid);
+  [[nodiscard]] bool NeedAlign(int mid);
 
   /// Publish messages
   void PublishAndReset();
@@ -261,15 +261,11 @@ void Decoder::Timing(const ros::Time& t_start) const {
   const auto t_proc_ms = t_proc * 1e3;
   const auto t_block_ms = model_.dt_packet * 1e3;
 
-  if (ratio > 5) {
-    ROS_WARN(
-        "time [ms] %.4f / %.4f (%.1f%%)", t_proc_ms, t_block_ms, ratio * 100);
-  }
   ROS_DEBUG_THROTTLE(
       1, "time [ms] %.4f / %.4f (%.1f%%)", t_proc_ms, t_block_ms, ratio * 100);
 }
 
-bool Decoder::CheckAlign(int mid) {
+bool Decoder::NeedAlign(int mid) {
   if (need_align_ && mid == 0) {
     need_align_ = false;
     ROS_INFO("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
@@ -291,7 +287,7 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
 
     // If we set need_align to true then this will wait for mid = 0 to
     // start a scan
-    if (CheckAlign(mid)) {
+    if (NeedAlign(mid)) {
       continue;
     }
 
@@ -310,7 +306,12 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
         Timing(t0);
       }
     } else if (0 < jump && jump <= model_.cols) {
-      ROS_WARN("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
+      // A jump smaller than a full sweep
+      ROS_WARN("Packet jumped to f%d:m%d by %d columns (%.2f sweeps).",
+               fid,
+               mid,
+               jump,
+               static_cast<double>(jump) / model_.cols);
       // Detect a jump, we need to forward scan icol by the same amount as jump
       // We could directly increment icol and publish if necessary, but
       // this will require us to zero the whole cloud at publish time which is
@@ -329,16 +330,20 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
       }
     } else {
       // Handle backward jump or large forward jump
-      ROS_ERROR("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
+      ROS_ERROR("Packet jumped to f%d:m%d by %d columns (%.2f sweeps).",
+                fid,
+                mid,
+                jump,
+                static_cast<double>(jump) / model_.cols);
       if (replay_) {
-        ROS_WARN("In replay mode, re-initialize...");
+        ROS_WARN("Large jump detected in replay mode, re-initialize...");
         need_align_ = true;
         scan_.HardReset();
         // Also need to reinitialize everything since it is possible that it is
         // a different dataset
         InitOuster();
       } else {
-        ROS_FATAL("Not in replay mode, shutting down...");
+        ROS_FATAL("Large jump detected in normal mode, shutting down...");
         ros::shutdown();
       }
       return;
