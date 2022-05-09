@@ -215,6 +215,7 @@ void Decoder::PublishAndReset() {
     cinfo_msg_->header = header;
     // Update camera info roi with scan
     scan_.UpdateCinfo(*cinfo_msg_);
+    scan_.image_ptr->header = header;
     camera_pub_.publish(scan_.image_ptr, cinfo_msg_);
   }
 
