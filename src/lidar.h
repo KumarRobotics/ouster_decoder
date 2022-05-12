@@ -17,6 +17,7 @@ struct ImageData {
   float z{};
   uint16_t r16u{};
   uint16_t s16u{};
+  uint16_t a16u{};
 
   void set_range(float range, double scale) noexcept {
     r16u = static_cast<uint16_t>(
@@ -26,12 +27,11 @@ struct ImageData {
 
   void set_bad() noexcept {
     x = y = z = std::numeric_limits<float>::quiet_NaN();
-    r16u = s16u = 0;
+    r16u = s16u = a16u = 0;
   }
-};
+} __attribute__((packed));
 
-static_assert(sizeof(ImageData) == sizeof(float) * 4,
-              "Size of ImageData must be 4 floats (16 bytes)");
+// static_assert(sizeof(ImageData) == 18, sizeof(ImageData));
 
 /// @brief Stores SensorInfo from ouster with some other useful data
 struct LidarModel {

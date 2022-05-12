@@ -85,7 +85,7 @@ void LidarScan::Allocate(int rows, int cols) {
 
   cloud.width = cols;
   cloud.height = rows;
-  cloud.point_step = 16;
+  cloud.point_step = sizeof(ImageData);
   cloud.row_step = cloud.point_step * cloud.width;
   cloud.fields = MakePointFieldsXYZI();
   cloud.is_dense = true;
@@ -167,6 +167,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     xyz.setConstant(kNaNF);
     float r{};
     uint16_t s16u{};
+    uint16_t a16u{};
 
     if (col_valid) {
       const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
@@ -178,8 +179,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
         r = xyz.norm();  // we compute range ourselves
       }
       s16u = pf.px_signal(px_buf);
-      // s16u = pf.px_ambient(px_buf);
-      // s16u = pf.px_reflectivity(px_buf);
+      a16u = pf.px_ambient(px_buf);
     }
 
     // Now we set cloud and image data
@@ -196,23 +196,16 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     const auto im_col = destagger ? icol + col_shift : icol;
 
     if (0 <= im_col && im_col < cols()) {
-      //      auto& px = image.at<ImageData>(ipx, im_col);
-      //      px.x = xyz.x();
-      //      px.y = xyz.y();
-      //      px.z = xyz.z();
-      //      px.set_range(r, range_scale);
-      //      px.s16u = s16u;
       auto* iptr = ImagePtr(ipx, im_col);
       iptr->x = xyz.x();
       iptr->y = xyz.y();
       iptr->z = xyz.z();
       iptr->set_range(r, range_scale);
       iptr->s16u = s16u;
+      iptr->a16u = a16u;
     } else {
       auto* iptr = ImagePtr(ipx, im_col % cols());
       iptr->set_bad();
-      //      auto& px = image.at<ImageData>(ipx, im_col % cols());
-      //      px.set_bad();
     }
   }
 

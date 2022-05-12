@@ -55,7 +55,7 @@ class Decoder {
   image_transport::ImageTransport it_;
   ros::Subscriber lidar_sub_, imu_sub_, meta_sub_;
   ros::Publisher cloud_pub_, imu_pub_;
-  ros::Publisher range_pub_, signal_pub_;
+  ros::Publisher range_pub_, signal_pub_, ambient_pub_;
   image_transport::CameraPublisher camera_pub_;
   tf2_ros::StaticTransformBroadcaster static_tf_;
   std::string sensor_frame_, lidar_frame_, imu_frame_;
@@ -94,6 +94,7 @@ void Decoder::InitRos() {
   imu_pub_ = pnh_.advertise<sm::Imu>("imu", 100);
   range_pub_ = pnh_.advertise<sm::Image>("range", 5);
   signal_pub_ = pnh_.advertise<sm::Image>("signal", 5);
+  ambient_pub_ = pnh_.advertise<sm::Image>("ambient", 5);
 
   // Frames
   sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
@@ -228,7 +229,7 @@ void Decoder::PublishAndReset() {
     // cast image as 8 channel short so that we can extract the last 2 as range
     // and signal
     const auto image = cv_bridge::toCvShare(scan_.image_ptr)->image;
-    const cv::Mat image16u(scan_.rows(), scan_.cols(), CV_16UC(8), image.data);
+    const cv::Mat image16u(scan_.rows(), scan_.cols(), CV_16UC(9), image.data);
 
     if (range_pub_.getNumSubscribers() > 0) {
       cv::Mat range;
@@ -244,6 +245,14 @@ void Decoder::PublishAndReset() {
       signal_pub_.publish(
           cv_bridge::CvImage(header, "16UC1", signal * vis_signal_scale_)
               .toImageMsg());
+    }
+
+    if (ambient_pub_.getNumSubscribers() > 0) {
+      cv::Mat ambient;
+      cv::extractChannel(image16u, ambient, 8);
+      // multiply by 32 for visualization purposes
+      ambient_pub_.publish(
+          cv_bridge::CvImage(header, "16UC1", ambient * 4).toImageMsg());
     }
   }
 

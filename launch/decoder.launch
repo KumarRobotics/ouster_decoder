@@ -75,5 +75,6 @@
         <remap from="~camera_info" to="camera_info"/>
         <remap from="~range" to="range"/>
         <remap from="~signal" to="signal"/>
+        <remap from="~ambient" to="ambient"/>
     </node>
 </launch>
