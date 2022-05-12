@@ -17,6 +17,8 @@
     <arg name="divide" default="1"/>
     <!-- Replay mode will reinitilize when detecting forward/backward jumps -->
     <arg name="replay" default="true"/>
+    <!-- Scale signal channel for visualization only -->
+    <arg name="vis_signal_scale" default="4.0"/>
 
     <!-- Destagger and align are currently disabled since there's really no point in changing them -->
     <!-- Destagger will be disabled if div_exp > 0 or subscan > 1.
@@ -50,6 +52,7 @@
         <param name="min_range" type="double" value="$(arg min_range)"/>
         <param name="max_range" type="double" value="$(arg max_range)"/>
         <param name="range_scale" type="double" value="$(arg range_scale)"/>
+        <param name="vis_signal_scale" type="double" value="$(arg vis_signal_scale)"/>
 
         <param name="acc_noise_std" type="double" value="$(arg acc_noise_std)"/>
         <param name="gyr_noise_std" type="double" value="$(arg gyr_noise_std)"/>

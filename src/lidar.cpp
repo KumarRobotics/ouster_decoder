@@ -176,10 +176,10 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       if (min_range <= range && range <= max_range) {
         xyz = model.ToPoint(range, theta_enc, ipx);
         r = xyz.norm();  // we compute range ourselves
-        // s16u = pf.px_ambient(px_buf);
-        // s16u = pf.px_reflectivity(px_buf);
       }
-      s16u = pf.px_ambient(px_buf);
+      s16u = pf.px_signal(px_buf);
+      // s16u = pf.px_ambient(px_buf);
+      // s16u = pf.px_reflectivity(px_buf);
     }
 
     // Now we set cloud and image data

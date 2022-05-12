@@ -66,11 +66,12 @@ class Decoder {
   sm::CameraInfoPtr cinfo_msg_;
 
   // params
-  double gravity_{};        // gravity
-  bool replay_{false};      // replay mode will reinitialize on jump
-  bool need_align_{true};   // whether to align scan
-  double acc_noise_var_{};  // discrete time acc noise variance
-  double gyr_noise_var_{};  // discrete time gyr noise variance
+  double gravity_{};              // gravity
+  bool replay_{false};            // replay mode will reinitialize on jump
+  bool need_align_{true};         // whether to align scan
+  double acc_noise_var_{};        // discrete time acc noise variance
+  double gyr_noise_var_{};        // discrete time gyr noise variance
+  double vis_signal_scale_{1.0};  // scale signal visualization
 };
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
@@ -130,6 +131,8 @@ void Decoder::InitParams() {
   ROS_INFO("Discrete time acc noise var: %f, gyr nosie var: %f",
            acc_noise_var_,
            gyr_noise_var_);
+  vis_signal_scale_ = pnh_.param<double>("vis_signal_scale", 4.0);
+  ROS_INFO("Signal scale: %f", vis_signal_scale_);
 }
 
 void Decoder::InitOuster() {
@@ -239,7 +242,8 @@ void Decoder::PublishAndReset() {
       cv::extractChannel(image16u, signal, 7);
       // multiply by 32 for visualization purposes
       signal_pub_.publish(
-          cv_bridge::CvImage(header, "16UC1", signal * 4).toImageMsg());
+          cv_bridge::CvImage(header, "16UC1", signal * vis_signal_scale_)
+              .toImageMsg());
     }
   }
 
