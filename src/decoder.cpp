@@ -239,7 +239,7 @@ void Decoder::PublishAndReset() {
       cv::extractChannel(image16u, signal, 7);
       // multiply by 32 for visualization purposes
       signal_pub_.publish(
-          cv_bridge::CvImage(header, "16UC1", signal * 32).toImageMsg());
+          cv_bridge::CvImage(header, "16UC1", signal * 4).toImageMsg());
     }
   }
 

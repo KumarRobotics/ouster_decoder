@@ -111,11 +111,9 @@ void LidarScan::HardReset() noexcept {
   icol = 0;
   iscan = 0;
   prev_uid = -1;
-  num_valid = 0;
 }
 
 void LidarScan::SoftReset(int full_col) noexcept {
-  num_valid = 0;
   // Reset col (usually to 0 but in the rare case that data jumps forward
   // it will be non-zero)
   icol = icol % cols();
@@ -178,9 +176,10 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       if (min_range <= range && range <= max_range) {
         xyz = model.ToPoint(range, theta_enc, ipx);
         r = xyz.norm();  // we compute range ourselves
-        s16u = pf.px_signal(px_buf);
-        ++num_valid;
+        // s16u = pf.px_ambient(px_buf);
+        // s16u = pf.px_reflectivity(px_buf);
       }
+      s16u = pf.px_ambient(px_buf);
     }
 
     // Now we set cloud and image data
@@ -224,7 +223,6 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   cinfo.R[0] = range_scale;
   cinfo.binning_x = iscan;
-  cinfo.binning_y = num_valid;
 
   // Update camera info roi with curr_scan
   auto& roi = cinfo.roi;
