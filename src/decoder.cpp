@@ -1,9 +1,6 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <ros/ros.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/image_encodings.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 
 #include "lidar.h"
@@ -44,7 +41,7 @@ class Decoder {
   void SendTransform(const LidarModel& model);
 
   /// Whether we are still waiting for alignment to mid 0
-  [[nodiscard]] bool CheckAlign(int mid);
+  [[nodiscard]] bool NeedAlign(int mid);
 
   /// Publish messages
   void PublishAndReset();
@@ -69,11 +66,12 @@ class Decoder {
   sm::CameraInfoPtr cinfo_msg_;
 
   // params
-  double gravity_{};        // gravity
-  bool replay_{false};      // replay mode will reinitialize on jump
-  bool need_align_{true};   // whether to align scan
-  double acc_noise_var_{};  // discrete time acc noise variance
-  double gyr_noise_var_{};  // discrete time gyr noise variance
+  double gravity_{};              // gravity
+  bool replay_{false};            // replay mode will reinitialize on jump
+  bool need_align_{true};         // whether to align scan
+  double acc_noise_var_{};        // discrete time acc noise variance
+  double gyr_noise_var_{};        // discrete time gyr noise variance
+  double vis_signal_scale_{1.0};  // scale signal visualization
 };
 
 Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
@@ -121,7 +119,7 @@ void Decoder::InitParams() {
            scan_.max_range,
            scan_.range_scale);
   if (scan_.max_range * scan_.range_scale >
-      static_cast<double>(ImageData::kMaxUint16)) {
+      static_cast<double>(std::numeric_limits<uint16_t>::max())) {
     throw std::domain_error("max range exceeds representation");
   }
 
@@ -133,6 +131,8 @@ void Decoder::InitParams() {
   ROS_INFO("Discrete time acc noise var: %f, gyr nosie var: %f",
            acc_noise_var_,
            gyr_noise_var_);
+  vis_signal_scale_ = pnh_.param<double>("vis_signal_scale", 4.0);
+  ROS_INFO("Signal scale: %f", vis_signal_scale_);
 }
 
 void Decoder::InitOuster() {
@@ -212,20 +212,23 @@ void Decoder::PublishAndReset() {
   // Publish image and camera_info
   // cinfo stores information about the full sweep, while roi stores information
   // about the subscan
-  const auto image_msg =
-      cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
-  cinfo_msg_->header = header;
-  // Update camera info roi with scan
-  scan_.UpdateCinfo(*cinfo_msg_);
-  camera_pub_.publish(image_msg, cinfo_msg_);
+  if (camera_pub_.getNumSubscribers() > 0) {
+    // const auto image_msg =
+    //     cv_bridge::CvImage(header, "32FC4", scan_.image).toImageMsg();
+    cinfo_msg_->header = header;
+    // Update camera info roi with scan
+    scan_.UpdateCinfo(*cinfo_msg_);
+    scan_.image_ptr->header = header;
+    camera_pub_.publish(scan_.image_ptr, cinfo_msg_);
+  }
 
   // Publish range image on demand
   if (range_pub_.getNumSubscribers() > 0 ||
       signal_pub_.getNumSubscribers() > 0) {
     // cast image as 8 channel short so that we can extract the last 2 as range
     // and signal
-    cv::Mat image16u(
-        scan_.image.rows, scan_.image.cols, CV_16UC(8), scan_.image.data);
+    const auto image = cv_bridge::toCvShare(scan_.image_ptr)->image;
+    const cv::Mat image16u(scan_.rows(), scan_.cols(), CV_16UC(8), image.data);
 
     if (range_pub_.getNumSubscribers() > 0) {
       cv::Mat range;
@@ -239,7 +242,8 @@ void Decoder::PublishAndReset() {
       cv::extractChannel(image16u, signal, 7);
       // multiply by 32 for visualization purposes
       signal_pub_.publish(
-          cv_bridge::CvImage(header, "16UC1", signal * 32).toImageMsg());
+          cv_bridge::CvImage(header, "16UC1", signal * vis_signal_scale_)
+              .toImageMsg());
     }
   }
 
@@ -259,20 +263,14 @@ void Decoder::Timing(const ros::Time& t_start) const {
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - t_start).toSec();
   const auto ratio = t_proc / model_.dt_packet;
-  if (ratio > 5) {
-    ROS_WARN("Proc time: %.4f ms, meas time: %.4f ms, ratio: %.1f%%",
-             t_proc * 1e3,
-             model_.dt_packet * 1e3,
-             ratio * 100);
-  }
-  ROS_DEBUG_THROTTLE(1,
-                     "Proc time: %.4f ms, meas time: %.4f ms, ratio: %.1f%%",
-                     t_proc * 1e3,
-                     model_.dt_packet * 1e3,
-                     ratio * 100);
+  const auto t_proc_ms = t_proc * 1e3;
+  const auto t_block_ms = model_.dt_packet * 1e3;
+
+  ROS_DEBUG_THROTTLE(
+      1, "time [ms] %.4f / %.4f (%.1f%%)", t_proc_ms, t_block_ms, ratio * 100);
 }
 
-bool Decoder::CheckAlign(int mid) {
+bool Decoder::NeedAlign(int mid) {
   if (need_align_ && mid == 0) {
     need_align_ = false;
     ROS_INFO("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
@@ -294,7 +292,7 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
 
     // If we set need_align to true then this will wait for mid = 0 to
     // start a scan
-    if (CheckAlign(mid)) {
+    if (NeedAlign(mid)) {
       continue;
     }
 
@@ -313,7 +311,12 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
         Timing(t0);
       }
     } else if (0 < jump && jump <= model_.cols) {
-      ROS_WARN("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
+      // A jump smaller than a full sweep
+      ROS_WARN("Packet jumped to f%d:m%d by %d columns (%.2f sweeps).",
+               fid,
+               mid,
+               jump,
+               static_cast<double>(jump) / model_.cols);
       // Detect a jump, we need to forward scan icol by the same amount as jump
       // We could directly increment icol and publish if necessary, but
       // this will require us to zero the whole cloud at publish time which is
@@ -332,16 +335,20 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
       }
     } else {
       // Handle backward jump or large forward jump
-      ROS_ERROR("Packet jumped to f%d:m%d by %d columns.", fid, mid, jump);
+      ROS_ERROR("Packet jumped to f%d:m%d by %d columns (%.2f sweeps).",
+                fid,
+                mid,
+                jump,
+                static_cast<double>(jump) / model_.cols);
       if (replay_) {
-        ROS_WARN("In replay mode, re-initialize...");
+        ROS_WARN("Large jump detected in replay mode, re-initialize...");
         need_align_ = true;
         scan_.HardReset();
         // Also need to reinitialize everything since it is possible that it is
         // a different dataset
         InitOuster();
       } else {
-        ROS_FATAL("Not in replay mode, shutting down...");
+        ROS_FATAL("Large jump detected in normal mode, shutting down...");
         ros::shutdown();
       }
       return;

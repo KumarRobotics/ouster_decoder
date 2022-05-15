@@ -1,5 +1,7 @@
 #include "lidar.h"
 
+#include <boost/make_shared.hpp>
+
 namespace ouster_decoder {
 
 namespace os = ouster_ros::sensor;
@@ -70,8 +72,16 @@ void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
 
 void LidarScan::Allocate(int rows, int cols) {
   // Don't do any work if rows and cols are the same
-  if (rows == image.rows && cols == image.cols) return;
-  image.create(rows, cols, CV_32FC4);
+  //  image.create(rows, cols, CV_32FC4);
+  if (image_ptr == nullptr) {
+    image_ptr = boost::make_shared<sensor_msgs::Image>();
+  }
+
+  image_ptr->height = rows;
+  image_ptr->width = cols;
+  image_ptr->encoding = "32FC4";
+  image_ptr->step = cols * sizeof(ImageData);
+  image_ptr->data.resize(rows * cols * sizeof(ImageData));
 
   cloud.width = cols;
   cloud.height = rows;
@@ -79,7 +89,7 @@ void LidarScan::Allocate(int rows, int cols) {
   cloud.row_step = cloud.point_step * cloud.width;
   cloud.fields = MakePointFieldsXYZI();
   cloud.is_dense = true;
-  cloud.data.resize(image.total() * cloud.point_step);
+  cloud.data.resize(rows * cols * cloud.point_step);
 
   times.clear();
   times.resize(cols, 0);
@@ -101,30 +111,30 @@ void LidarScan::HardReset() noexcept {
   icol = 0;
   iscan = 0;
   prev_uid = -1;
-  num_valid = 0;
 }
 
 void LidarScan::SoftReset(int full_col) noexcept {
-  num_valid = 0;
   // Reset col (usually to 0 but in the rare case that data jumps forward
   // it will be non-zero)
-  icol = icol % image.cols;
+  icol = icol % cols();
 
   // Reset scan if we have a full sweep
-  if (iscan * image.cols >= full_col) {
+  if (iscan * cols() >= full_col) {
     iscan = 0;
   }
 }
 
-void LidarScan::InvalidateColumn(double dt_col) {
+void LidarScan::InvalidateColumn(double dt_col) noexcept {
   for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
     auto* ptr = CloudPtr(irow, icol);
     ptr[0] = ptr[1] = ptr[2] = kNaNF;
   }
 
-  for (int irow = 0; irow < image.rows; ++irow) {
-    auto& px = image.at<cv::Vec4f>(irow, icol);
-    px[0] = px[1] = px[2] = px[3] = kNaNF;
+  for (int irow = 0; irow < rows(); ++irow) {
+    auto* ptr = ImagePtr(irow, icol);
+    ptr->set_bad();
+    //    auto& px = image.at<cv::Vec4f>(irow, icol);
+    //    px[0] = px[1] = px[2] = px[3] = kNaNF;
   }
 
   // It is possible that the jump spans two subscans, this will cause the
@@ -152,52 +162,56 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
   times.at(icol) = t_ns;
 
   for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
-    const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
-    const auto raw_range = pf.px_range(px_buf);
-    const float range = raw_range * kMmToM;
+    // Data to fill
+    Eigen::Vector3f xyz;
+    xyz.setConstant(kNaNF);
+    float r{};
+    uint16_t s16u{};
 
-    // im_col is where the pixel should go in the image
-    // it is the same as icol when we are not in staggered mode
-    int im_col = icol;
-    if (destagger) {
-      // add pixel shift to get where the pixel should be
-      im_col += model.pixel_shifts()[ipx];
-      // if it is outside the current subscan, we set this pixel invalid
-      if (im_col < 0 || im_col >= cols()) {
-        col_valid = false;
+    if (col_valid) {
+      const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
+      const auto raw_range = pf.px_range(px_buf);
+      const float range = raw_range * kMmToM;  // used to compute xyz
+
+      if (min_range <= range && range <= max_range) {
+        xyz = model.ToPoint(range, theta_enc, ipx);
+        r = xyz.norm();  // we compute range ourselves
+        s16u = pf.px_signal(px_buf);
       }
-      // make sure index is within bound
-      im_col = im_col % cols();
+      s16u += pf.px_ambient(px_buf);
     }
 
-    // Set point
-    auto* ptr = CloudPtr(ipx, icol);
-    auto& px = image.at<ImageData>(ipx, im_col);
+    // Now we set cloud and image data
+    // There is no destagger for cloud, so we update point no matter what
+    auto* cptr = CloudPtr(ipx, icol);
+    cptr[0] = xyz.x();
+    cptr[1] = xyz.y();
+    cptr[2] = xyz.z();
+    cptr[3] = static_cast<float>(s16u);
 
-    if (col_valid && min_range < range && range < max_range) {
-      const auto xyz = model.ToPoint(range, theta_enc, ipx);
+    // However image can be destaggered, and pixel can go out of bound
+    // add pixel shift to get where the pixel should be
+    const auto col_shift = model.pixel_shifts()[ipx];
+    const auto im_col = destagger ? icol + col_shift : icol;
 
-      // https://github.com/ouster-lidar/ouster_example/issues/128
-      // Intensity: whereas most "normal" surfaces lie in between 0 - 1000
-
-      px.x = xyz.x();
-      px.y = xyz.y();
-      px.z = xyz.z();
-      const float r = xyz.norm();
-      px.set_range(r, range_scale);
-      const auto signal = pf.px_signal(px_buf);
-      px.set_signal(signal);
-
-      ptr[0] = xyz.x();
-      ptr[1] = xyz.y();
-      ptr[2] = xyz.z();
-      ptr[3] = signal;
-
-      ++num_valid;  // increment valid points
+    if (0 <= im_col && im_col < cols()) {
+      //      auto& px = image.at<ImageData>(ipx, im_col);
+      //      px.x = xyz.x();
+      //      px.y = xyz.y();
+      //      px.z = xyz.z();
+      //      px.set_range(r, range_scale);
+      //      px.s16u = s16u;
+      auto* iptr = ImagePtr(ipx, im_col);
+      iptr->x = xyz.x();
+      iptr->y = xyz.y();
+      iptr->z = xyz.z();
+      iptr->set_range(r, range_scale);
+      iptr->s16u = s16u;
     } else {
-      px.x = px.y = px.z = kNaNF;
-      px.range_raw = px.signal_raw = 0;
-      ptr[0] = ptr[1] = ptr[2] = kNaNF;
+      auto* iptr = ImagePtr(ipx, im_col % cols());
+      iptr->set_bad();
+      //      auto& px = image.at<ImageData>(ipx, im_col % cols());
+      //      px.set_bad();
     }
   }
 
@@ -208,14 +222,13 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   cinfo.R[0] = range_scale;
   cinfo.binning_x = iscan;
-  cinfo.binning_y = num_valid;
 
   // Update camera info roi with curr_scan
   auto& roi = cinfo.roi;
   roi.x_offset = StartingCol();
   roi.y_offset = 0;
-  roi.width = image.cols;
-  roi.height = image.rows;
+  roi.width = cols();
+  roi.height = rows();
   roi.do_rectify = destagger;
 }
 

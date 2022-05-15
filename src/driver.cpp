@@ -1,3 +1,21 @@
+/**
+ * Copyright (c) 2018, Ouster, Inc.
+ * All rights reserved.
+ *
+ * @file
+ * @brief Example node to publish raw sensor output on ROS topics
+ *
+ * ROS Parameters
+ * sensor_hostname: hostname or IP in dotted decimal form of the sensor
+ * udp_dest: hostname or IP where the sensor will send data packets
+ * lidar_port: port to which the sensor should send lidar data
+ * imu_port: port to which the sensor should send imu data
+ */
+
+// This is a modified version of ouster_ros/os_node.cpp
+// It is intended to have the same behavior as os_node. 
+// The only difference is that we also advertise the metadata message.
+
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 

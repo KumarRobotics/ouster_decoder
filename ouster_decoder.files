@@ -1,3 +1,5 @@
+.clang-format
+.clang-tidy
 CMakeLists.txt
 README.md
 cmake/Cache.cmake
@@ -8,10 +10,6 @@ launch/decoder.launch
 launch/driver.launch
 package.xml
 src/bench.cpp
-src/decoder.cpp
-src/decoder.h
-.clang-format
-.clang-tidy
 src/decoder.cpp
 src/decoder.h
 src/driver.cpp

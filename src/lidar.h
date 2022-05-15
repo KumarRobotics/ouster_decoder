@@ -1,9 +1,8 @@
 #pragma once
 
 #include <sensor_msgs/CameraInfo.h>
+#include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
-
-#include <opencv2/core/mat.hpp>
 
 #include "ouster_ros/ros.h"
 
@@ -16,17 +15,18 @@ struct ImageData {
   float x{};
   float y{};
   float z{};
-  uint16_t range_raw{};
-  uint16_t signal_raw{};
+  uint16_t r16u{};
+  uint16_t s16u{};
 
-  static constexpr auto kMaxUint16 = std::numeric_limits<uint16_t>::max();
-
-  void set_range(double range, double scale) noexcept {
-    range_raw = std::min(range * scale, static_cast<double>(kMaxUint16));
+  void set_range(float range, double scale) noexcept {
+    r16u = static_cast<uint16_t>(
+        std::min(range * scale,
+                 static_cast<double>(std::numeric_limits<uint16_t>::max())));
   }
 
-  void set_signal(double signal) noexcept {
-    signal_raw = std::min(signal, static_cast<double>(kMaxUint16));
+  void set_bad() noexcept {
+    x = y = z = std::numeric_limits<float>::quiet_NaN();
+    r16u = s16u = 0;
   }
 };
 
@@ -81,23 +81,29 @@ struct LidarScan {
   int icol{0};   // column index
   int iscan{0};  // subscan index
   int prev_uid{-1};
-  int num_valid{0};
   double min_range{};
   double max_range{};
   double range_scale{};
   bool destagger{false};
 
-  cv::Mat image;
+  //  cv::Mat image;
+  sensor_msgs::ImagePtr image_ptr;
   sensor_msgs::PointCloud2 cloud;
   std::vector<uint64_t> times;  // all time stamps [nanosecond]
 
   float* CloudPtr(int r, int c) {
-    const auto i = r * cloud.width + c;
+    const auto i = r * cols() + c;
     return reinterpret_cast<float*>(cloud.data.data() + i * cloud.point_step);
   }
 
-  int rows() const noexcept { return image.rows; }
-  int cols() const noexcept { return image.cols; }
+  ImageData* ImagePtr(int r, int c) {
+    const auto i = r * cols() + c;
+    return reinterpret_cast<ImageData*>(image_ptr->data.data() +
+                                        i * sizeof(ImageData));
+  }
+
+  int rows() const noexcept { return static_cast<int>(cloud.height); }
+  int cols() const noexcept { return static_cast<int>(cloud.width); }
 
   /// @brief whether this scan is full
   bool IsFull() const noexcept { return icol >= cols(); }
@@ -119,7 +125,7 @@ struct LidarScan {
   void SoftReset(int full_col) noexcept;
 
   /// @brief Invalidate an entire column
-  void InvalidateColumn(double dt_col);
+  void InvalidateColumn(double dt_col) noexcept;
 
   /// @brief Decode column
   void DecodeColumn(const uint8_t* const col_buf, const LidarModel& model);
