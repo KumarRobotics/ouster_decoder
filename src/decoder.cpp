@@ -166,11 +166,12 @@ void Decoder::InitOuster() {
 void Decoder::InitModel(const std::string& metadata) {
   // parse metadata into lidar model
   model_ = LidarModel{metadata};
-  ROS_INFO("Lidar mode %s: %d x %d @ %d hz",
+  ROS_INFO("Lidar mode %s: %d x %d @ %d hz, delta_azimuth %f",
            os::to_string(model_.info.mode).c_str(),
            model_.rows,
            model_.cols,
-           model_.freq);
+           model_.freq,
+           model_.d_azimuth);
   ROS_INFO("Columns per packet: %d, Pixels per column: %d",
            model_.pf->columns_per_packet,
            model_.pf->pixels_per_column);
@@ -282,12 +283,12 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
   const auto t0 = ros::Time::now();
   const auto* packet_buf = lidar_msg.buf.data();
   const auto& pf = *model_.pf;
-  //    const int fid = pf.frame_id(packet_buf);
+  const int fid = pf.frame_id(packet_buf);
 
   for (int col = 0; col < pf.columns_per_packet; ++col) {
     // Get column buffer
     const uint8_t* const col_buf = pf.nth_col(col, packet_buf);
-    const int fid = pf.col_frame_id(col_buf);
+    // const int fid = pf.col_frame_id(col_buf);
     const int mid = pf.col_measurement_id(col_buf);
 
     // If we set need_align to true then this will wait for mid = 0 to
