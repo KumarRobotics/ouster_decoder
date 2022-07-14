@@ -4,6 +4,8 @@ This decoder is intended to replace the ouster_ros package from https://github.c
 
 It has very low latency (<0.2ms) compared to ouster_example (>3ms).
 
+The decoder only supports LEGACY and single return profile.
+
 ## Usage
 
 Run the ouster driver 
