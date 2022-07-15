@@ -2,7 +2,7 @@
 
 This decoder is intended to replace the ouster_ros package from https://github.com/ouster-lidar/ouster_example
 
-It has very low latency (<0.2ms) compared to ouster_example (>3ms).
+It has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on Intel i7 11th gen cpu.
 
 The decoder only supports LEGACY and single return profile.
 
