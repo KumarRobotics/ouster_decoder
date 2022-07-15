@@ -66,16 +66,14 @@ void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
   cinfo.D.insert(cinfo.D.end(), pixel_shifts().begin(), pixel_shifts().end());
 
   cinfo.K[0] = dt_col;  // time between each column
-  //  cinfo.K[1] = d_azimuth;    // radian between each column
-  //  cinfo.K[2] = beam_offset;  // distance from center to beam
+  // cinfo.K[1] = d_azimuth;    // radian between each column
+  // cinfo.K[2] = beam_offset;  // distance from center to beam
 }
 
 void LidarScan::Allocate(int rows, int cols) {
   // Don't do any work if rows and cols are the same
   //  image.create(rows, cols, CV_32FC4);
-  if (image_ptr == nullptr) {
-    image_ptr = boost::make_shared<sensor_msgs::Image>();
-  }
+  if (!image_ptr) image_ptr = boost::make_shared<sensor_msgs::Image>();
 
   image_ptr->height = rows;
   image_ptr->width = cols;
@@ -85,10 +83,10 @@ void LidarScan::Allocate(int rows, int cols) {
 
   cloud.width = cols;
   cloud.height = rows;
-  cloud.point_step = 16;
+  cloud.point_step = 16;  // xyzi
   cloud.row_step = cloud.point_step * cloud.width;
   cloud.fields = MakePointFieldsXYZI();
-  cloud.is_dense = true;
+  cloud.is_dense = 1u;
   cloud.data.resize(rows * cols * cloud.point_step);
 
   times.clear();
@@ -213,12 +211,12 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
 void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   cinfo.R[0] = range_scale;
-  cinfo.binning_x = iscan;
+  cinfo.binning_x = iscan;  // index of subscan within a full scan
 
   // Update camera info roi with curr_scan
   auto& roi = cinfo.roi;
   roi.x_offset = StartingCol();
-  roi.y_offset = 0;
+  roi.y_offset = 0;  // this is always 0
   roi.width = cols();
   roi.height = rows();
   roi.do_rectify = destagger;

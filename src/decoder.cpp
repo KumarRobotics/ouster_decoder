@@ -274,7 +274,7 @@ void Decoder::Timing(const ros::Time& t_start) const {
 bool Decoder::NeedAlign(int mid) {
   if (need_align_ && mid == 0) {
     need_align_ = false;
-    ROS_INFO("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
+    ROS_WARN("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
   }
   return need_align_;
 }
