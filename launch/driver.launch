@@ -30,8 +30,8 @@
         <param name="~/tf_prefix" value="$(arg tf_prefix)"/>
     </node>
 
-    <node pkg="ouster_ros" name="img_node" type="img_node" output="screen" required="true">
+    <!-- <node pkg="ouster_ros" name="img_node" type="img_node" output="screen" required="true">
         <remap from="~/os_config" to="/os_node/os_config"/>
         <remap from="~/points" to="/os_cloud_node/points"/>
-    </node>
+    </node> -->
 </launch>
