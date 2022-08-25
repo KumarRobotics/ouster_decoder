@@ -64,7 +64,7 @@
 
         <!-- input topics -->
         <remap from="~metadata" to="$(arg driver_ns)/metadata"/>
-        <remap from="~os_config" to="$(arg driver_ns)/os_config"/>
+        <remap from="~get_metadata" to="$(arg driver_ns)/get_metadata"/>
         <remap from="~imu_packets" to="$(arg driver_ns)/imu_packets"/>
         <remap from="~lidar_packets" to="$(arg driver_ns)/lidar_packets"/>
 
