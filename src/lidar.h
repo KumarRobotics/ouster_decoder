@@ -78,18 +78,18 @@ struct LidarModel {
 
 /// @brief Stores data for a (sub)scan
 struct LidarScan {
-  int icol{0};   // column index
-  int iscan{0};  // subscan index
-  int prev_uid{-1};
-  double min_range{};
-  double max_range{};
-  double range_scale{};
-  bool destagger{false};
+  int icol{0};              // column index
+  int iscan{0};             // subscan index
+  int prev_uid{-1};         // previous uid
+  double min_range{0.25};   // minimum range
+  double max_range{256.0};  // maximum range
+  double range_scale{};     // raw range is  uint_16, divide by scale to meter
+  bool destagger{false};    // whether to destagger scan
 
   //  cv::Mat image;
-  sensor_msgs::ImagePtr image_ptr;
-  sensor_msgs::PointCloud2 cloud;
-  std::vector<uint64_t> times;  // all time stamps [nanosecond]
+  sensor_msgs::ImagePtr image_ptr;  // each pixel is ImageData
+  sensor_msgs::PointCloud2 cloud;   // each point is (x,y,z,intensity)
+  std::vector<uint64_t> times;      // all time stamps [nanosecond]
 
   float* CloudPtr(int r, int c) {
     const auto i = r * cols() + c;

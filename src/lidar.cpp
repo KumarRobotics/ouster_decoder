@@ -66,16 +66,14 @@ void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
   cinfo.D.insert(cinfo.D.end(), pixel_shifts().begin(), pixel_shifts().end());
 
   cinfo.K[0] = dt_col;  // time between each column
-  //  cinfo.K[1] = d_azimuth;    // radian between each column
-  //  cinfo.K[2] = beam_offset;  // distance from center to beam
+  // cinfo.K[1] = d_azimuth;    // radian between each column
+  // cinfo.K[2] = beam_offset;  // distance from center to beam
 }
 
 void LidarScan::Allocate(int rows, int cols) {
   // Don't do any work if rows and cols are the same
   //  image.create(rows, cols, CV_32FC4);
-  if (image_ptr == nullptr) {
-    image_ptr = boost::make_shared<sensor_msgs::Image>();
-  }
+  if (!image_ptr) image_ptr = boost::make_shared<sensor_msgs::Image>();
 
   image_ptr->height = rows;
   image_ptr->width = cols;
@@ -85,10 +83,10 @@ void LidarScan::Allocate(int rows, int cols) {
 
   cloud.width = cols;
   cloud.height = rows;
-  cloud.point_step = 16;
+  cloud.point_step = 16;  // xyzi
   cloud.row_step = cloud.point_step * cloud.width;
   cloud.fields = MakePointFieldsXYZI();
-  cloud.is_dense = true;
+  cloud.is_dense = 1u;
   cloud.data.resize(rows * cols * cloud.point_step);
 
   times.clear();
@@ -133,8 +131,6 @@ void LidarScan::InvalidateColumn(double dt_col) noexcept {
   for (int irow = 0; irow < rows(); ++irow) {
     auto* ptr = ImagePtr(irow, icol);
     ptr->set_bad();
-    //    auto& px = image.at<cv::Vec4f>(irow, icol);
-    //    px[0] = px[1] = px[2] = px[3] = kNaNF;
   }
 
   // It is possible that the jump spans two subscans, this will cause the
@@ -152,12 +148,14 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
   const auto& pf = *model.pf;
   const uint64_t t_ns = pf.col_timestamp(col_buf);
   const uint16_t mid = pf.col_measurement_id(col_buf);
-  const uint32_t status = pf.col_status(col_buf);
-  bool col_valid = (status == 0xffffffff);
+  const uint32_t status = pf.col_status(col_buf) & 0x0001;
+  // Legacy mode
+  // const bool col_valid = (status == 0xffffffff);
+  //  const bool col_valid = status;
 
   // Compute azimuth angle theta0, this should always be valid
   // const auto theta_enc = kTau - mid * model_.d_azimuth;
-  //  const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
+  // const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
   const float theta_enc = kTau - mid * model.d_azimuth;
   times.at(icol) = t_ns;
 
@@ -168,7 +166,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     float r{};
     uint16_t s16u{};
 
-    if (col_valid) {
+    if (status) {
       const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
       const auto raw_range = pf.px_range(px_buf);
       const float range = raw_range * kMmToM;  // used to compute xyz
@@ -178,7 +176,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
         r = xyz.norm();  // we compute range ourselves
         s16u = pf.px_signal(px_buf);
       }
-      s16u += pf.px_ambient(px_buf);
+      // s16u += pf.px_ambient(px_buf);
     }
 
     // Now we set cloud and image data
@@ -195,12 +193,6 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     const auto im_col = destagger ? icol + col_shift : icol;
 
     if (0 <= im_col && im_col < cols()) {
-      //      auto& px = image.at<ImageData>(ipx, im_col);
-      //      px.x = xyz.x();
-      //      px.y = xyz.y();
-      //      px.z = xyz.z();
-      //      px.set_range(r, range_scale);
-      //      px.s16u = s16u;
       auto* iptr = ImagePtr(ipx, im_col);
       iptr->x = xyz.x();
       iptr->y = xyz.y();
@@ -210,8 +202,6 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     } else {
       auto* iptr = ImagePtr(ipx, im_col % cols());
       iptr->set_bad();
-      //      auto& px = image.at<ImageData>(ipx, im_col % cols());
-      //      px.set_bad();
     }
   }
 
@@ -221,12 +211,12 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
 
 void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   cinfo.R[0] = range_scale;
-  cinfo.binning_x = iscan;
+  cinfo.binning_x = iscan;  // index of subscan within a full scan
 
   // Update camera info roi with curr_scan
   auto& roi = cinfo.roi;
   roi.x_offset = StartingCol();
-  roi.y_offset = 0;
+  roi.y_offset = 0;  // this is always 0
   roi.width = cols();
   roi.height = rows();
   roi.do_rectify = destagger;
