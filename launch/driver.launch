@@ -21,17 +21,4 @@
         <param name="~/imu_port" value="$(arg imu_port)"/>
         <param name="~/metadata" value="$(arg metadata)"/>
     </node>
-
-    <!-- Get rid of this later -->
-    <node pkg="ouster_ros" type="os_cloud_node" name="os_cloud_node" output="screen" required="true">
-        <remap from="~/os_config" to="/os_node/os_config"/>
-        <remap from="~/lidar_packets" to="/os_node/lidar_packets"/>
-        <remap from="~/imu_packets" to="/os_node/imu_packets"/>
-        <param name="~/tf_prefix" value="$(arg tf_prefix)"/>
-    </node>
-
-    <!-- <node pkg="ouster_ros" name="img_node" type="img_node" output="screen" required="true">
-        <remap from="~/os_config" to="/os_node/os_config"/>
-        <remap from="~/points" to="/os_cloud_node/points"/>
-    </node> -->
 </launch>

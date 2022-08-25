@@ -13,7 +13,7 @@
  */
 
 // This is a modified version of ouster_ros/os_node.cpp
-// It is intended to have the same behavior as os_node. 
+// It is intended to have the same behavior as os_node.
 // The only difference is that we also advertise the metadata message.
 
 #include <ros/ros.h>
@@ -25,12 +25,12 @@
 
 // #include "ouster/build.h"
 #include "ouster/types.h"
-#include "ouster_ros/OSConfigSrv.h"
+#include "ouster_ros/GetMetadata.h"
 #include "ouster_ros/PacketMsg.h"
 #include "ouster_ros/ros.h"
 
 using PacketMsg = ouster_ros::PacketMsg;
-using OSConfigSrv = ouster_ros::OSConfigSrv;
+using OsGetMetadata = ouster_ros::GetMetadata;
 namespace sensor = ouster::sensor;
 
 // fill in values that could not be parsed from metadata
@@ -130,9 +130,9 @@ void advertise_service(ros::NodeHandle& nh,
              srv.getService().c_str());
     srv.shutdown();
   }
-  srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
-      "os_config",
-      [metadata](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
+  srv = nh.advertiseService<OsGetMetadata::Request, OsGetMetadata::Response>(
+      "get_metadata",
+      [metadata](OsGetMetadata::Request&, OsGetMetadata::Response& res) {
         if (metadata.empty()) return false;
         res.metadata = metadata;
         return true;
@@ -279,9 +279,9 @@ int main(int argc, char** argv) {
     pub_meta.publish(meta_msg);
     ROS_INFO("Publish metadata to %s", pub_meta.getTopic().c_str());
 
-    srv = nh.advertiseService<OSConfigSrv::Request, OSConfigSrv::Response>(
-        "os_config",
-        [metadata](OSConfigSrv::Request&, OSConfigSrv::Response& res) {
+    srv = nh.advertiseService<OsGetMetadata::Request, OsGetMetadata::Response>(
+        "get_metadata",
+        [metadata](OsGetMetadata::Request&, OsGetMetadata::Response& res) {
           if (metadata.empty()) return false;
           res.metadata = metadata;
           return true;

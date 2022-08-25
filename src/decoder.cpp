@@ -4,7 +4,7 @@
 #include <tf2_ros/static_transform_broadcaster.h>
 
 #include "lidar.h"
-#include "ouster_ros/OSConfigSrv.h"
+#include "ouster_ros/GetMetadata.h"
 #include "ouster_ros/PacketMsg.h"
 
 namespace ouster_decoder {
@@ -138,7 +138,7 @@ void Decoder::InitParams() {
 void Decoder::InitOuster() {
   ROS_INFO_STREAM("=== Initializing Ouster Decoder ===");
   // wait for service
-  auto client = pnh_.serviceClient<ouster_ros::OSConfigSrv>("os_config");
+  auto client = pnh_.serviceClient<ouster_ros::GetMetadata>("get_metadata");
 
   // NOTE: it is possible that in replay mode, the service was shutdown and
   // re-advertised. If the client call is too soon, then we risk getting the old
@@ -151,10 +151,10 @@ void Decoder::InitOuster() {
 
   client.waitForExistence();
 
-  ouster_ros::OSConfigSrv cfg{};
+  ouster_ros::GetMetadata srv{};
   // Initialize everything if service call is successful
-  if (client.call(cfg)) {
-    InitModel(cfg.response.metadata);
+  if (client.call(srv)) {
+    InitModel(srv.response.metadata);
     InitScan(model_);
     SendTransform(model_);
   } else {
