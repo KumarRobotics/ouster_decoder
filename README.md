@@ -6,6 +6,11 @@ It has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on In
 
 The decoder only supports LEGACY and single return profile. Currently there's no plan for dual return profile.
 
+## Important
+
+The timestamp of both the cloud and image message is the time of the last column, not the first column.
+This is different from the official driver, which uses timestamp of the first column. 
+
 ## Usage
 
 Run the ouster driver 
