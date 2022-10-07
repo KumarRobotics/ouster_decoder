@@ -23,8 +23,6 @@
 #include <sstream>
 #include <string>
 
-// #include "ouster/build.h"
-#include "ouster/types.h"
 #include "ouster_ros/GetMetadata.h"
 #include "ouster_ros/PacketMsg.h"
 #include "ouster_ros/ros.h"
