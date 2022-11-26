@@ -25,7 +25,7 @@
 
 #include "ouster_ros/GetMetadata.h"
 #include "ouster_ros/PacketMsg.h"
-#include "ouster_ros/ros.h"
+#include "ouster_ros/os_ros.h"
 
 using PacketMsg = ouster_ros::PacketMsg;
 using OsGetMetadata = ouster_ros::GetMetadata;
