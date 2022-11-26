@@ -4,7 +4,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
 
-#include "ouster_ros/ros.h"
+#include "ouster_ros/os_ros.h"
 
 namespace ouster_decoder {
 
