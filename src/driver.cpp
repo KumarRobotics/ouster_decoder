@@ -15,6 +15,8 @@
 // This is a modified version of ouster_ros/os_node.cpp
 // It is intended to have the same behavior as os_node.
 // The only difference is that we also advertise the metadata message.
+// The logic here was kept the same in the 2024 refactor.
+
 
 #include <ros/ros.h>
 #include <std_msgs/String.h>

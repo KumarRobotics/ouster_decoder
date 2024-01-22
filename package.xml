@@ -1,18 +1,21 @@
 <?xml version="1.0"?>
 <package format="2">
-    <name>ouster_decoder</name>
-    <version>0.1.0</version>
-    <description>Ouster decoder</description>
-    <maintainer email="quchao@seas.upenn.edu">Chao Qu</maintainer>
-    <license>BSD</license>
-    <buildtool_depend>catkin</buildtool_depend>
+  <name>ouster_decoder</name>
+  <version>0.0.0</version>
+  <description>The ouster_decoder package</description>
 
-    <depend>cv_bridge</depend>
-    <depend>image_transport</depend>
-    <depend>pcl_ros</depend>
-    <depend>sensor_msgs</depend>
+  <maintainer email="jasonah@seas.upenn.edu">Jason Hughes</maintainer>
+  <license>BSD</license>
 
-    <depend>ouster_ros</depend>
+  <buildtool_depend>catkin</buildtool_depend>
 
-    <export></export>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+  <depend>pcl_ros</depend>
+  <depend>sensor_msgs</depend>
+
+  <depend>ouster_ros</depend>
+
+  <export>
+  </export>
 </package>

@@ -1,4 +1,10 @@
+/* January 2024
+*  Basic structs for data organization around lidar scans and lidar metadata
+*/
+
 #pragma once
+
+#include <boost/make_shared.hpp>
 
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
@@ -6,12 +12,11 @@
 
 #include "ouster_ros/os_ros.h"
 
-namespace ouster_decoder {
-
 inline constexpr double Deg2Rad(double deg) { return deg * M_PI / 180.0; }
 
 /// @brief image data in scan
-struct ImageData {
+struct ImageData 
+{
   float x{};
   float y{};
   float z{};
@@ -34,7 +39,8 @@ static_assert(sizeof(ImageData) == sizeof(float) * 4,
               "Size of ImageData must be 4 floats (16 bytes)");
 
 /// @brief Stores SensorInfo from ouster with some other useful data
-struct LidarModel {
+struct LidarModel 
+{
   LidarModel() = default;
   explicit LidarModel(const std::string& metadata);
 
@@ -77,7 +83,8 @@ struct LidarModel {
 };
 
 /// @brief Stores data for a (sub)scan
-struct LidarScan {
+struct LidarScan 
+{
   int icol{0};              // column index
   int iscan{0};             // subscan index
   int prev_uid{-1};         // previous uid
@@ -136,4 +143,3 @@ struct LidarScan {
 
 std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept;
 
-}  // namespace ouster_decoder

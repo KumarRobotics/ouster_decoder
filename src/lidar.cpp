@@ -1,36 +1,35 @@
-#include "lidar.h"
+/* January 2024
+*  cpp file for lidar data structs
+*/
 
-#include <boost/make_shared.hpp>
-
-namespace ouster_decoder {
-
-namespace os = ouster_ros::sensor;
+#include "ouster_decoder/lidar.h"
 
 constexpr float kMmToM = 0.001;
 constexpr double kTau = 2 * M_PI;
 constexpr float kNaNF = std::numeric_limits<float>::quiet_NaN();
 
-namespace {
-
-/// @brief Convert a vector of double from deg to rad
-std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) {
+// @brief Convert a vector of double from degrees to radians 
+std::vector<double> TransformDeg2Rad(const std::vector<double>& degs) 
+{
   std::vector<double> rads;
   rads.reserve(degs.size());
+  
   for (const auto& deg : degs) {
     rads.push_back(Deg2Rad(deg));
   }
+
   return rads;
 }
 
-}  // namespace
-
-LidarModel::LidarModel(const std::string& metadata) {
-  info = os::parse_metadata(metadata);
-  pf = &os::get_format(info);
+// LidarModel
+LidarModel::LidarModel(const std::string& metadata) 
+{
+  info = ouster_ros::sensor::parse_metadata(metadata);
+  pf = &ouster_ros::sensor::get_format(info);
 
   rows = info.beam_altitude_angles.size();
-  cols = os::n_cols_of_lidar_mode(info.mode);
-  freq = os::frequency_of_lidar_mode(info.mode);
+  cols = ouster_ros::sensor::n_cols_of_lidar_mode(info.mode);
+  freq = ouster_ros::sensor::frequency_of_lidar_mode(info.mode);
 
   dt_col = 1.0 / freq / cols;
   d_azimuth = kTau / cols;
@@ -40,9 +39,8 @@ LidarModel::LidarModel(const std::string& metadata) {
   azimuths = TransformDeg2Rad(info.beam_azimuth_angles);
 }
 
-Eigen::Vector3f LidarModel::ToPoint(float range,
-                                    float theta_enc,
-                                    int row) const {
+Eigen::Vector3f LidarModel::ToPoint(float range, float theta_enc, int row) const 
+{
   const float n = beam_offset;
   const float d = range - n;
   const float phi = altitudes[row];
@@ -54,23 +52,21 @@ Eigen::Vector3f LidarModel::ToPoint(float range,
           d * std::sin(phi)};
 }
 
-void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const {
+void LidarModel::UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const
+{
   cinfo.height = rows;
   cinfo.width = cols;
   cinfo.distortion_model = info.prod_line;
 
-  // cinfo.D.reserve(altitudes.size() + azimuths.size());
-  // cinfo.D.insert(cinfo.D.end(), altitudes.begin(), altitudes.end());
-  // cinfo.D.insert(cinfo.D.end(), azimuths.begin(), azimuths.end());
   cinfo.D.reserve(pixel_shifts().size());
   cinfo.D.insert(cinfo.D.end(), pixel_shifts().begin(), pixel_shifts().end());
 
   cinfo.K[0] = dt_col;  // time between each column
-  // cinfo.K[1] = d_azimuth;    // radian between each column
-  // cinfo.K[2] = beam_offset;  // distance from center to beam
 }
 
-void LidarScan::Allocate(int rows, int cols) {
+// LidarScan
+void LidarScan::Allocate(int rows, int cols) 
+{
   // Don't do any work if rows and cols are the same
   //  image.create(rows, cols, CV_32FC4);
   if (!image_ptr) image_ptr = boost::make_shared<sensor_msgs::Image>();
@@ -93,7 +89,8 @@ void LidarScan::Allocate(int rows, int cols) {
   times.resize(cols, 0);
 }
 
-int LidarScan::DetectJump(int uid) noexcept {
+int LidarScan::DetectJump(int uid) noexcept 
+{
   int jump = 0;
 
   if (prev_uid >= 0) {
@@ -105,13 +102,15 @@ int LidarScan::DetectJump(int uid) noexcept {
   return jump;
 }
 
-void LidarScan::HardReset() noexcept {
+void LidarScan::HardReset() noexcept 
+{
   icol = 0;
   iscan = 0;
   prev_uid = -1;
 }
 
-void LidarScan::SoftReset(int full_col) noexcept {
+void LidarScan::SoftReset(int full_col) noexcept 
+{
   // Reset col (usually to 0 but in the rare case that data jumps forward
   // it will be non-zero)
   icol = icol % cols();
@@ -122,7 +121,8 @@ void LidarScan::SoftReset(int full_col) noexcept {
   }
 }
 
-void LidarScan::InvalidateColumn(double dt_col) noexcept {
+void LidarScan::InvalidateColumn(double dt_col) noexcept 
+{
   for (int irow = 0; irow < static_cast<int>(cloud.height); ++irow) {
     auto* ptr = CloudPtr(irow, icol);
     ptr[0] = ptr[1] = ptr[2] = kNaNF;
@@ -143,8 +143,9 @@ void LidarScan::InvalidateColumn(double dt_col) noexcept {
   ++icol;
 }
 
-void LidarScan::DecodeColumn(const uint8_t* const col_buf,
-                             const LidarModel& model) {
+
+void LidarScan::DecodeColumn(const uint8_t* const col_buf, const LidarModel& model) 
+{
   const auto& pf = *model.pf;
   const uint64_t t_ns = pf.col_timestamp(col_buf);
   const uint16_t mid = pf.col_measurement_id(col_buf);
@@ -158,26 +159,41 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
   // const float theta_enc = kTau * (1.0f - encoder / 90112.0f);
   const float theta_enc = kTau - mid * model.d_azimuth;
   times.at(icol) = t_ns;
+  uint32_t raw_ranges[pf.pixels_per_column];
+  uint32_t raw_signal[pf.pixels_per_column];
+
+  pf.col_field(col_buf,
+               ouster_ros::sensor::ChanField::RANGE,
+               raw_ranges,
+               1);
+
+  pf.col_field(col_buf,
+               ouster_ros::sensor::ChanField::SIGNAL,
+               raw_signal,
+               1);
 
   for (int ipx = 0; ipx < pf.pixels_per_column; ++ipx) {
     // Data to fill
     Eigen::Vector3f xyz;
     xyz.setConstant(kNaNF);
     float r{};
-    uint16_t s16u{};
+    //uint16_t s16u{};
+    uint32_t signal;
 
     if (status) {
       const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
-      const auto raw_range = pf.px_range(px_buf);
-      const float range = raw_range * kMmToM;  // used to compute xyz
+      //const auto raw_range = pf.px_range(px_buf); //TODO: this needs to be replaced!!
+      const float range = raw_ranges[ipx] * kMmToM;  // used to compute xyz
 
       if (min_range <= range && range <= max_range) {
         xyz = model.ToPoint(range, theta_enc, ipx);
         r = xyz.norm();  // we compute range ourselves
-        s16u = pf.px_signal(px_buf);
+        signal = raw_signal[ipx]; //pf.px_signal(px_buf); //TODO: this needs to be replaced!!
       }
       // s16u += pf.px_ambient(px_buf);
     }
+    // TODO: what if we don't enter the above if-statement
+    // We're still setting signal without ever getting it. 
 
     // Now we set cloud and image data
     // There is no destagger for cloud, so we update point no matter what
@@ -185,7 +201,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
     cptr[0] = xyz.x();
     cptr[1] = xyz.y();
     cptr[2] = xyz.z();
-    cptr[3] = static_cast<float>(s16u);
+    cptr[3] = static_cast<float>(signal);
 
     // However image can be destaggered, and pixel can go out of bound
     // add pixel shift to get where the pixel should be
@@ -198,7 +214,7 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
       iptr->y = xyz.y();
       iptr->z = xyz.z();
       iptr->set_range(r, range_scale);
-      iptr->s16u = s16u;
+      iptr->s16u = signal;
     } else {
       auto* iptr = ImagePtr(ipx, im_col % cols());
       iptr->set_bad();
@@ -209,7 +225,8 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf,
   ++icol;
 }
 
-void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
+void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept 
+{
   cinfo.R[0] = range_scale;
   cinfo.binning_x = iscan;  // index of subscan within a full scan
 
@@ -222,7 +239,8 @@ void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept {
   roi.do_rectify = destagger;
 }
 
-std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept {
+std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept
+{
   using sensor_msgs::PointField;
   std::vector<PointField> fields;
   fields.reserve(4);
@@ -255,4 +273,3 @@ std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept {
   return fields;
 }
 
-}  // namespace ouster_decoder

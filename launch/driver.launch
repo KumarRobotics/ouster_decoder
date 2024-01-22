@@ -11,7 +11,7 @@
     <arg name="driver_ns" default="os_node"/>
 
     <!-- <node pkg="ouster_ros" type="os_node" name="os_node" output="screen" required="true"> -->
-    <node pkg="ouster_decoder" type="ouster_driver" name="$(arg driver_ns)" output="screen" required="true">
+    <node pkg="ouster_decoder" type="driver_node" name="$(arg driver_ns)" output="screen" required="true">
         <param name="~/lidar_mode" type="string" value="$(arg lidar_mode)"/>
         <param name="~/timestamp_mode" type="string" value="$(arg timestamp_mode)"/>
         <param name="~/replay" value="$(arg replay)"/>

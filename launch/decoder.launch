@@ -42,7 +42,7 @@
     <arg name="lidar_frame" default="os_lidar"/>
     <arg name="imu_frame" default="os_imu"/>
 
-    <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder" output="screen" ns="$(arg lidar_ns)">
+    <node pkg="ouster_decoder" name="os_decoder" type="decoder_node" output="screen" ns="$(arg lidar_ns)">
         <!-- params -->
         <param name="divide" type="int" value="$(arg divide)"/>
         <param name="replay" type="bool" value="$(arg replay)"/>
