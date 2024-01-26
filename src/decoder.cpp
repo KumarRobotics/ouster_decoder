@@ -107,11 +107,7 @@ void Decoder::InitOuster()
 void Decoder::InitModel(const std::string& metadata) 
 {
   // parse metadata into lidar model
-  std::cout << "metadata: "<< metadata << std::endl;
-  std::string legacy_metadata = ouster_ros::sensor::convert_to_legacy(metadata);
-  std::cout << "legacy: " << metadata <<std::endl;
-
-  model_ = LidarModel{legacy_metadata};
+  model_ = LidarModel{metadata};
   ROS_INFO("Lidar mode %s: %d x %d @ %d hz, delta_azimuth %f",
            ouster_ros::sensor::to_string(model_.info.mode).c_str(),
            model_.rows,

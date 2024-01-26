@@ -56,34 +56,40 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
     }
     else
     {
-        ROS_INFO("Connecting to sensor with hostname: %s", hostname_.c_str());
-        ROS_INFO("Sending data to udp destination: %s", udp_dest_.c_str());
+        try
+        {
+            ROS_INFO("Connecting to sensor with hostname: %s", hostname_.c_str());
+            ROS_INFO("Sending data to udp destination: %s", udp_dest_.c_str());
 
-        cli_ = ouster::sensor::init_client(hostname_,
-                                           udp_dest_,
-                                           lidar_mode,
-                                           timestamp_mode,
-                                           lidar_port_,
-                                           imu_port_);
-        if (!cli_)
-        {
-            ROS_ERROR("Failed to initialize sensor at %s", hostname_.c_str());
-            ros::shutdown();
-        }
-        metadata = ouster::sensor::get_metadata (*cli_, 20, true);
-        if (meta_file_.empty())
-        {
-            meta_file_ = hostname_+".json";
-            ROS_INFO("No metadata json specified, using %s", meta_file_.c_str());
-        }
-        if (!writeMetadata(metadata))
-        {
-            ROS_ERROR("Couldn't write metadata to json, continueing");
-        }
-        info = ouster::sensor::parse_metadata(metadata);
-        populateMetadataDefaults(info, lidar_mode);
+            cli_ = ouster::sensor::init_client(hostname_,
+                                               udp_dest_,
+                                               lidar_mode,
+                                               timestamp_mode,
+                                               lidar_port_,
+                                               imu_port_);
+            if (!cli_)
+            {
+                ROS_ERROR("Failed to initialize sensor at %s", hostname_.c_str());
+                ros::shutdown();
+            }
+            metadata = ouster::sensor::get_metadata (*cli_, 20, true);
+            if (meta_file_.empty())
+            {
+                meta_file_ = hostname_+".json";
+                ROS_INFO("No metadata json specified, using %s", meta_file_.c_str());
+            }
+            if (!writeMetadata(metadata))
+            {
+                ROS_ERROR("Couldn't write metadata to json, continueing");
+            }
+            info = ouster::sensor::parse_metadata(metadata);
+            //info = populateMetadataDefaults(info, lidar_mode);
 
-        advertiseService(info);
+            advertiseService(info);
+        } catch(const std::exception& e)
+        {
+            ROS_ERROR("Error connection to sensor: %s", e.what());
+        }
     }
     ROS_INFO("Using lidar_mode: %s", ouster::sensor::to_string(info.mode).c_str());
     ROS_INFO("%s sn: %s firmware rev: %s",
@@ -94,7 +100,7 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
     int success = connectionLoop(info);
 }
 
-void Driver::populateMetadataDefaults(ouster::sensor::sensor_info&  info, ouster::sensor::lidar_mode specified_lidar_mode)
+ouster::sensor::sensor_info Driver::populateMetadataDefaults(ouster::sensor::sensor_info&  info, ouster::sensor::lidar_mode specified_lidar_mode)
 {
     if (!info.name.size()) info.name = "UNKNOWN";
     if (!info.sn.size()) info.sn = "UNKNOWN";
@@ -119,6 +125,7 @@ void Driver::populateMetadataDefaults(ouster::sensor::sensor_info&  info, ouster
         info.beam_azimuth_angles = ouster::sensor::gen1_azimuth_angles;
         info.beam_altitude_angles = ouster::sensor::gen1_altitude_angles;
     }
+    return info;
 }
 
 bool Driver::writeMetadata(const std::string& metadata)
@@ -185,7 +192,7 @@ int Driver::connectionLoop(const ouster::sensor::sensor_info info)
 
 void Driver::advertiseService(const ouster::sensor::sensor_info info)
 {
-    std::string metadata = ouster::sensor::to_string(info);
+    std::string metadata = info.original_string();//ouster::sensor::to_string(info);
 
     if (srv_)
     {
@@ -198,8 +205,6 @@ void Driver::advertiseService(const ouster::sensor::sensor_info info)
            res.metadata = metadata;
            return true;
          });
-    //srv.request.metadata = metadata;
-    //srv_ = nh_.advertiseService("get_metadata", &Driver::validateMetadata, &srv);
     ROS_INFO("Advertising Metadata on service %s.", srv_.getService().c_str());
 }
 

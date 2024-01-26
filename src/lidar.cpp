@@ -25,6 +25,8 @@ std::vector<double> TransformDeg2Rad(const std::vector<double>& degs)
 LidarModel::LidarModel(const std::string& metadata) 
 {
   std::cout << "Metadata: "<< metadata << std::endl;
+  //std::string legacy_metadata = ouster::sensor::convert_to_legacy(metadata);
+  //std::cout << "converted..." << std::endl;
   info = ouster_ros::sensor::parse_metadata(metadata);
   std::cout << "parsed metadata" << std::endl;
   pf = &ouster_ros::sensor::get_format(info);
