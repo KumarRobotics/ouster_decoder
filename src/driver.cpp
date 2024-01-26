@@ -83,7 +83,6 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
                 ROS_ERROR("Couldn't write metadata to json, continueing");
             }
             info = ouster::sensor::parse_metadata(metadata);
-            //info = populateMetadataDefaults(info, lidar_mode);
 
             advertiseService(info);
         } catch(const std::exception& e)
@@ -96,36 +95,7 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
              info.prod_line.c_str(),
              info.sn.c_str(),
              info.fw_rev.c_str());
-
-    int success = connectionLoop(info);
-}
-
-ouster::sensor::sensor_info Driver::populateMetadataDefaults(ouster::sensor::sensor_info&  info, ouster::sensor::lidar_mode specified_lidar_mode)
-{
-    if (!info.name.size()) info.name = "UNKNOWN";
-    if (!info.sn.size()) info.sn = "UNKNOWN";
-
-    ouster::util::version v = ouster::util::version_of_string(info.fw_rev);
-    if (v == ouster::util::invalid_version)
-        ROS_WARN("Unknown sensor firmware version; output may not be reliable");
-    else if (v < ouster::sensor::min_version)
-        ROS_WARN("Firmware < %s not supported; output may not be reliable",
-                 to_string(ouster::sensor::min_version).c_str());
-
-    if (!info.mode) 
-    {
-        ROS_WARN("Lidar mode not found in metadata; output may not be reliable");
-        info.mode = specified_lidar_mode;
-    }
-    if (!info.prod_line.size()) info.prod_line = "UNKNOWN";
-
-    if (info.beam_azimuth_angles.empty() || info.beam_altitude_angles.empty()) 
-    {
-        ROS_WARN("Beam angles not found in metadata; using design values");
-        info.beam_azimuth_angles = ouster::sensor::gen1_azimuth_angles;
-        info.beam_altitude_angles = ouster::sensor::gen1_altitude_angles;
-    }
-    return info;
+    if (!replay_) int success = connectionLoop(info);
 }
 
 bool Driver::writeMetadata(const std::string& metadata)
@@ -157,7 +127,8 @@ int Driver::connectionLoop(const ouster::sensor::sensor_info info)
     ouster_ros::PacketMsg lidar_packet, imu_packet;
     lidar_packet.buf.resize(pf.lidar_packet_size + 1);
     imu_packet.buf.resize(pf.imu_packet_size + 1);
-
+    
+    ROS_INFO("Publishing Packets...");
     while (ros::ok())
     {
         ouster::sensor::client_state state = ouster::sensor::poll_client(*cli_);

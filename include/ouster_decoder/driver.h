@@ -23,9 +23,6 @@ class Driver
         void initParams();
         void initRos();
 
-        ouster::sensor::sensor_info populateMetadataDefaults(
-            ouster::sensor::sensor_info& info,
-            ouster::sensor::lidar_mode specified_lidar_mode);
         bool writeMetadata(const std::string& metadata);
         int connectionLoop(const ouster::sensor::sensor_info info);
         void advertiseService(const ouster::sensor::sensor_info info);
