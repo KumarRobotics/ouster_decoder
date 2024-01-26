@@ -22,7 +22,10 @@ Then run the decoder
 ```
 roslaunch ouster_decoder decoder.launch
 ```
-
+Running on hardware requires setting a few more parameters:
+```
+roslaunch ouster_decoder driver.launch sensor_hostname:=192.168.100.12 lidar_port:=7502 imu_port:=7503 udp_dest:=192.168.100.1 replay:=false
+```
 The driver node is the same as the one from `ouster_example` except that it publishes a string message to topic `/os_node/metadata` that you should also record. When in replay mode, there's no need to specify a metadata file. The metadata file will still be saved in case one forgot to record the metadata message.
 
 ## Decoder
@@ -36,8 +39,8 @@ struct Data {
     float x;
     float y;
     float z;
-    uint16_t r16u; // range
-    uint16_t s16u; // signal
+    uint32_t range; // range
+    uint32_t signal; // signal
 };
 ```
 
@@ -53,3 +56,6 @@ Our decoder also checks for missing data. This is very useful for debugging purp
 The decoder then makes sure that missing data is zeroed out in the message. 
 
 Therefore, one can safely stop and replay a recorded rosbag without restarting the driver and decoder.
+
+## Notes
+CPU usage is 9.0 percent with ouster_ros.

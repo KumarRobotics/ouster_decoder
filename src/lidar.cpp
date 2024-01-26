@@ -24,9 +24,11 @@ std::vector<double> TransformDeg2Rad(const std::vector<double>& degs)
 // LidarModel
 LidarModel::LidarModel(const std::string& metadata) 
 {
+  std::cout << "Metadata: "<< metadata << std::endl;
   info = ouster_ros::sensor::parse_metadata(metadata);
+  std::cout << "parsed metadata" << std::endl;
   pf = &ouster_ros::sensor::get_format(info);
-
+  
   rows = info.beam_altitude_angles.size();
   cols = ouster_ros::sensor::n_cols_of_lidar_mode(info.mode);
   freq = ouster_ros::sensor::frequency_of_lidar_mode(info.mode);

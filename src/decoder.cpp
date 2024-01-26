@@ -1,5 +1,5 @@
-/* 
-* functions for decoder node
+/* January 2024 Refactor 
+*  Functions for decoder node
 */
 
 #include "ouster_decoder/decoder.h"
@@ -14,9 +14,9 @@ Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh)
 void Decoder::InitRos() 
 {
   // Subscribers, queue size is 1 second
-  lidar_sub_ =
-      pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
+  lidar_sub_ = pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
   imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
+  
   ROS_INFO_STREAM("Subscribing lidar packets: " << lidar_sub_.getTopic());
   ROS_INFO_STREAM("Subscribing imu packets: " << imu_sub_.getTopic());
 
@@ -31,6 +31,7 @@ void Decoder::InitRos()
   sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
   lidar_frame_ = pnh_.param<std::string>("lidar_frame", "os_lidar");
   imu_frame_ = pnh_.param<std::string>("imu_frame", "os_imu");
+  
   ROS_INFO_STREAM("Sensor frame: " << sensor_frame_);
   ROS_INFO_STREAM("Lidar frame: " << lidar_frame_);
   ROS_INFO_STREAM("Imu frame: " << imu_frame_);
@@ -106,7 +107,11 @@ void Decoder::InitOuster()
 void Decoder::InitModel(const std::string& metadata) 
 {
   // parse metadata into lidar model
-  model_ = LidarModel{metadata};
+  std::cout << "metadata: "<< metadata << std::endl;
+  std::string legacy_metadata = ouster_ros::sensor::convert_to_legacy(metadata);
+  std::cout << "legacy: " << metadata <<std::endl;
+
+  model_ = LidarModel{legacy_metadata};
   ROS_INFO("Lidar mode %s: %d x %d @ %d hz, delta_azimuth %f",
            ouster_ros::sensor::to_string(model_.info.mode).c_str(),
            model_.rows,
