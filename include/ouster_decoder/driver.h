@@ -24,6 +24,7 @@ class Driver
         void initRos();
 
         bool writeMetadata(const std::string& metadata);
+        void metadataCallback(const std_msgs::String msg);
         int connectionLoop(const ouster::sensor::sensor_info info);
         void advertiseService(const ouster::sensor::sensor_info info);
 

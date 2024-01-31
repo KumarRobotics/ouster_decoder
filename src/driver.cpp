@@ -35,20 +35,28 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
         }
     }
 
-    if (!replay_ && (!hostname_.size() || !udp_dest_.size()))
+    if (!replay_)
     {
-        ROS_ERROR("Must specify both hostname and udp destination when not in replay mode");
-        ros::shutdown();
+        ROS_INFO("Running in hardware mode");
+        ROS_INFO("Looking for sensor at: %s", hostname_.c_str());
+        ROS_INFO("Sending data to udp destination: %s", udp_dest_.c_str());
     }
 
     if (replay_)
     {
         try
         {
-            ROS_INFO("Running in replay mode");
-            info = ouster::sensor::metadata_from_json(meta_file_); 
-            advertiseService(info);
-
+            if (!meta_file_.empty())
+            {
+                ROS_INFO("Running in replay mode");
+                info = ouster::sensor::metadata_from_json(meta_file_); 
+                advertiseService(info);
+            }
+            else
+            {
+                meta_sub_ = nh_.subscribe("metadata", 1, &Driver::metadataCallback, this);    
+                ROS_WARN("No metadata file specified, looking for metadata on topic");
+            }
         } catch (const std::runtime_error& e)
         {
             ROS_ERROR("Error running in replay mode: %s", e.what());
@@ -95,6 +103,11 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
              info.prod_line.c_str(),
              info.sn.c_str(),
              info.fw_rev.c_str());
+    //publish metadata on topic (mostly for bagging)
+    std_msgs::String meta_msg;
+    meta_msg.data = metadata;
+    meta_pub_.publish(meta_msg);
+
     if (!replay_) int success = connectionLoop(info);
 }
 
@@ -163,7 +176,7 @@ int Driver::connectionLoop(const ouster::sensor::sensor_info info)
 
 void Driver::advertiseService(const ouster::sensor::sensor_info info)
 {
-    std::string metadata = info.original_string();//ouster::sensor::to_string(info);
+    std::string metadata = info.original_string();
 
     if (srv_)
     {
@@ -183,17 +196,23 @@ void Driver::initRos()
 {
     lidar_pub_ = nh_.advertise<ouster_ros::PacketMsg>("lidar_packets", 1280);
     imu_pub_ = nh_.advertise<ouster_ros::PacketMsg>("imu_packets", 100);
+    meta_pub_ = nh_.advertise<std_msgs::String>("metadata", 1);
 }
 
 void Driver::initParams()
 {
+    nh_.getParam("replay", replay_);
     hostname_ = nh_.param("sensor_hostname", std::string{});
     udp_dest_ = nh_.param("udp_dest", std::string{});
     lidar_port_  = nh_.param("lidar_port", 0);
     imu_port_    = nh_.param("imu_port", 0);
-    replay_          = nh_.param("replay", false);
     lidar_mode_arg_ = nh_.param("lidar_mode", std::string{});
     timestamp_mode_arg_ = nh_.param("timestamp_mode", std::string{});
     nh_.param<std::string>("udp_profile_lidar", udp_profile_lidar_arg_, "");
     nh_.param<std::string>("metadata", meta_file_, "");
 }
+
+void Driver::metadataCallback(const std_msgs::String msg)
+{
+    advertiseService(ouster::sensor::parse_metadata(msg.data)); 
+}   

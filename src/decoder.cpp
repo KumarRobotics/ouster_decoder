@@ -41,7 +41,7 @@ void Decoder::InitParams()
 {
   replay_ = pnh_.param<bool>("replay", false);
   ROS_INFO("Replay: %s", replay_ ? "true" : "false");
-
+  
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   ROS_INFO("Gravity: %f", gravity_);
   
@@ -298,8 +298,10 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg)
         // a different dataset
         InitOuster();
       } else {
-        ROS_FATAL("Large jump detected in normal mode, shutting down...");
-        ros::shutdown();
+        ROS_FATAL("Large jump detected in normal mode, restarting...");
+        need_align_ = true;
+        scan_.HardReset();
+        InitOuster();
       }
       return;
     }

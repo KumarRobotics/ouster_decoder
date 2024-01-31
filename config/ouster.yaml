@@ -1,0 +1,6 @@
+sensor_hostname: 192.168.100.12
+udp_dest: 192.168.100.1
+lidar_port: 7502
+imu_port: 7503
+
+replay: false
