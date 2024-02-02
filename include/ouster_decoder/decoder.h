@@ -1,6 +1,6 @@
 /*!
  * Kumar Robotics
- * Januart 2024
+ * Januart 2024 refactor
  * @breif: decodes incoming lidar and imu packets and publishes them 
  * on appropriate ROS topics
  * Authors: Chao Qu and Jason Hughes

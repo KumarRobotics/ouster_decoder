@@ -1,6 +1,11 @@
-/* January 2024 Refactor 
-*  Functions for decoder node
-*/
+/*!
+ * Kumar Robotics
+ * January 2024 Refactor
+ * Logic for handling incoming lidar and imu packets and
+ * passing them appropriate struct to be decoded. Once the buffers are 
+ * ready they are published on the appropriate topics.
+ * Authors: Chao Qu, Jason Hughes
+ */ 
 
 #include "ouster_decoder/decoder.h"
 

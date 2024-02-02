@@ -1,3 +1,12 @@
+/*!
+* Kumar Robotics
+* January 2024 Refactor
+* @breif: talks to the ouster via the ouster client 
+* and get metadata, lidar packets and imu packets and passes them along
+* on ros topics. 
+* Authors: Chao Qu, Jason Hughes and Ouster
+*/
+
 #include "ouster_decoder/driver.h"
 
 Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)

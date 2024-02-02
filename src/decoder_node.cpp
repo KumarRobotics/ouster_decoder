@@ -1,7 +1,9 @@
-/* January 2024
-*  As part of the refactor for upgrades to ouster_ros v0.10+
-*  Node start script for ouster decoder
-*/
+/*!
+ * Kumar Robotics
+ * January 2024 Refactor
+ * @brief: starter for the ros decoder node
+ * Authors: Jason Hughes
+ */  
 
 #include "ouster_decoder/decoder.h"
 

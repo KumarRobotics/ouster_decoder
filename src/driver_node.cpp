@@ -1,3 +1,10 @@
+/*!
+* Kumar Robotics
+* January 2024 Refactor
+* @brief: starter for ouster driver ros node
+* Authors: Jason Hughes
+*/
+
 #include "ouster_decoder/driver.h"
 
 int main(int argc , char** argv)

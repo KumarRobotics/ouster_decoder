@@ -1,5 +1,5 @@
 /*! Kumar Robotics
- *  January 2024
+ *  January 2024 refactor
  *  Structs for data organization around lidar scans, lidar metadata and range/signal images
  *  Authors: Chao Qu and Jason Hughes
  */

@@ -1,6 +1,6 @@
 /*!
  * Kumar Robotics
- * January 2024
+ * January 2024 refactor
  * @breif: a cleaned up version of ousters' old driver. It gets
  * lidar and imu packets from the ouster via the ouster client and 
  * publishes them on a PacketMsg topic.

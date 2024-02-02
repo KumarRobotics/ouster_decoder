@@ -1,6 +1,10 @@
-/* January 2024
-*  cpp file for lidar data structs
-*/
+/*!
+ * Kumar Robotics
+ * January 2024 refactor
+ * @breif logic ofr handling lidar metadata, image formatting and 
+ * incoming lidar buffers from the packets
+ * Author: Chao Qu
+ */
 
 #include "ouster_decoder/lidar.h"
 
