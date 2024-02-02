@@ -182,13 +182,12 @@ void LidarScan::DecodeColumn(const uint8_t* const col_buf, const LidarModel& mod
 
     if (status) {
       const uint8_t* const px_buf = pf.nth_px(ipx, col_buf);
-      //const auto raw_range = pf.px_range(px_buf); //TODO: this needs to be replaced!!
       const float range = raw_ranges[ipx] * kMmToM;  // used to compute xyz
 
       if (min_range <= range && range <= max_range) {
         xyz = model.ToPoint(range, theta_enc, ipx);
         r = xyz.norm();  // we compute range ourselves
-        signal = raw_signal[ipx]; //pf.px_signal(px_buf); //TODO: this needs to be replaced!!
+        signal = raw_signal[ipx]; 
       }
       // s16u += pf.px_ambient(px_buf);
     }
@@ -239,7 +238,7 @@ void LidarScan::UpdateCinfo(sensor_msgs::CameraInfo& cinfo) const noexcept
   roi.do_rectify = destagger;
 }
 
-std::vector<sensor_msgs::PointField> MakePointFieldsXYZI() noexcept
+std::vector<sensor_msgs::PointField> LidarScan::MakePointFieldsXYZI() noexcept
 {
   using sensor_msgs::PointField;
   std::vector<PointField> fields;

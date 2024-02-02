@@ -83,7 +83,7 @@ Driver::Driver(const ros::NodeHandle& nh) : nh_(nh)
             metadata = ouster::sensor::get_metadata (*cli_, 20, true);
             if (meta_file_.empty())
             {
-                meta_file_ = hostname_+".json";
+                meta_file_ = "metadata.json";
                 ROS_INFO("No metadata json specified, using %s", meta_file_.c_str());
             }
             if (!writeMetadata(metadata))
@@ -208,7 +208,6 @@ void Driver::initParams()
     imu_port_    = nh_.param("imu_port", 0);
     lidar_mode_arg_ = nh_.param("lidar_mode", std::string{});
     timestamp_mode_arg_ = nh_.param("timestamp_mode", std::string{});
-    nh_.param<std::string>("udp_profile_lidar", udp_profile_lidar_arg_, "");
     nh_.param<std::string>("metadata", meta_file_, "");
 }
 

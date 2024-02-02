@@ -4,6 +4,7 @@
 
     <arg name="lidar_ns" default="os_node"/>
     <arg name="driver_ns" default="/os_node"/>
+    <arg name="replay" default="false"/>
 
     <!-- ouster: https://data.ouster.io/downloads/datasheets/datasheet-revd-v2p1-os1.pdf -->
     <!-- anything < min_range or > max_range will be set to nan -->

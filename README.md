@@ -1,8 +1,6 @@
 # ouster_decoder
 
-This decoder is intended to extend the ouster_ros package from https://github.com/ouster-lidar/ouster_example
-
-It has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on Intel i7 11th gen cpu.
+This decoder is intended as an alternative the [ouster-ros](https://github.com/ouster-lidar/ouster-ros) decoder. It publishes things like LidarScans in a different formats which may be better for things like Lidar Odometry, while things like point clouds, signal, range and IMU remain in the same format. It also has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on Intel i7 11th gen cpu. This will also notify you when packets are dropped.
 
 The decoder only supports LEGACY and single return profile. Currently there's no plan for dual return profile.
 
@@ -11,22 +9,40 @@ The decoder only supports LEGACY and single return profile. Currently there's no
 The timestamp of both the cloud and image message is the time of the last column, not the first column.
 This is different from the official driver, which uses timestamp of the first column. 
 
+## Setup
+Clone this repo in you catkin workspace along with [ouster-ros](https://github.com/ouster-lidar/ouster-ros) and `catkin build`. We use thier custom service and messages and thier ouster sdk submodule. 
+
+## Parameters
+The following parameters may differ from the defaults that we use. They can be set in the launch file or passed as an argument.
+- `replay` set to `true` if you are using a bag, default: `false`.
+- `sensor_hostname` hostname or IP in dotted decimal format of the ouster, default: `192.168.100.12`
+- `udp_dest` hostname or IP in dotted decimal format of where the sensor will send data. Most likely the computer the ouster is connected to, default: `192.168.100.1`
+- `lidar_port` the port to which the ouster will send lidar packets, default: `7502`
+- `imu_port` the port to which the ouster will send imu packets, default: `7503`
+- `lidar_mode` resolution and rate of the lidar: either `512x10`, `512x20`, `1024x10`, `1024x20`, or `2048x10`, defualt comes from lidar.
+- `timestamp_mode` method used to timestamp measurements: either `IME_FROM_INTERNAL_OSC`, `TIME_FROM_SYNC_PULSE_IN`, `TIME_FROM_PTP_1588`, default comes from lidar.
+- `metadata` specifiy a metadata file to write to, default: `ouster_decoder/metadata.json`. This must be specified if you are using a bag without the `/metadata` topic. 
+- `tf_prefic` namespace for tf transforms.
+- `driver_ns` namespace for driver node.
+
 ## Usage
+To start everything at once use:
+```
+roslaunch ouster_decoder driver.launch
+```
 
-Run the ouster driver 
+Run just the driver (if you want to bag the packets for later decoding) 
 ```
-roslaunch ouster_decoder driver.launch replay:=true/false
+roslaunch ouster_decoder driver.launch
 ```
 
-Then run the decoder
+To run with a bag file run:
 ```
-roslaunch ouster_decoder decoder.launch
+roslaunch ouster_decoder ouster.launch replay:=true
 ```
-Running on hardware requires setting a few more parameters:
-```
-roslaunch ouster_decoder driver.launch sensor_hostname:=192.168.100.12 lidar_port:=7502 imu_port:=7503 udp_dest:=192.168.100.1 replay:=false
-```
-The driver node is the same as the one from `ouster_example` except that it publishes a string message to topic `/os_node/metadata` that you should also record. When in replay mode, there's no need to specify a metadata file. The metadata file will still be saved in case one forgot to record the metadata message.
+and start your bag in another terminal. If your bag does not have the `/metadata` topic you'll need to specify a json file with `metadata:=/path/to/json`.
+
+The driver node is the same (logically) as the one from `ouster_example`, but cleaned up and it publishes a string message to topic `/os_node/metadata` that you should also record. When in replay mode, there's no need to specify a metadata file. The metadata file will still be saved in case one forgot to record the metadata message.
 
 ## Decoder
 
@@ -39,8 +55,8 @@ struct Data {
     float x;
     float y;
     float z;
-    uint32_t range; // range
-    uint32_t signal; // signal
+    uint16_t r16u; // range
+    uint16_t s16u; // signal
 };
 ```
 
@@ -57,5 +73,3 @@ The decoder then makes sure that missing data is zeroed out in the message.
 
 Therefore, one can safely stop and replay a recorded rosbag without restarting the driver and decoder.
 
-## Notes
-CPU usage is 9.0 percent with ouster_ros.
