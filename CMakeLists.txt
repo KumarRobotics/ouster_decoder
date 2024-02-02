@@ -33,5 +33,3 @@ target_link_libraries(decoder_node PRIVATE ${catkin_LIBRARIES})
 add_executable(driver_node src/driver.cpp src/driver_node.cpp)
 target_link_libraries(driver_node PRIVATE ${catkin_LIBRARIES})
 
-add_executable(driver_old_node src/driver_old.cpp)
-target_link_libraries(driver_old_node PRIVATE ${catkin_LIBRARIES})
