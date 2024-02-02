@@ -1,6 +1,6 @@
 # ouster_decoder
 
-This decoder is intended as an alternative the [ouster-ros](https://github.com/ouster-lidar/ouster-ros) decoder. It publishes things like LidarScans in a different formats which may be better for things like Lidar Odometry, while things like point clouds, signal, range and IMU remain in the same format. It also has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on Intel i7 11th gen cpu. This will also notify you when packets are dropped.
+This decoder is intended as an alternative the [ouster-ros](https://github.com/ouster-lidar/ouster-ros) decoder. It publishes things like LidarScans in a different formats which may be better for things like Lidar Odometry, while things like point clouds, signal, range and IMU remain in the same format. It also has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on Intel i7 11th gen cpu. This will also notify you when packets are dropped. The decoder is up to date with the v0.10 of the ouster SDK.
 
 The decoder only supports LEGACY and single return profile. Currently there's no plan for dual return profile.
 
