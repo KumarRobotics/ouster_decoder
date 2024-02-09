@@ -21,34 +21,34 @@ inline constexpr double Deg2Rad(double deg) { return deg * M_PI / 180.0; }
  */ 
 struct ImageData 
 {
-    // @brief: x,y,z values
-    float x{};
-    float y{};
-    float z{};
-    // @brief: range
-    uint16_t r16u{};
-    // @brief:signal
-    uint16_t s16u{};
+  // @brief: x,y,z values
+  float x{};
+  float y{};
+  float z{};
+  // @brief: range
+  uint16_t r16u{};
+  // @brief:signal
+  uint16_t s16u{};
 
-    /*!
-    * @breif: set the raw range value in image struct
-    * @param: range in meters
-    * @param: scale thet range is in
-    */
-    void set_range(float range, double scale) noexcept 
-    {
-        r16u = static_cast<uint16_t>(
-            std::min(range * scale,
-                     static_cast<double>(std::numeric_limits<uint16_t>::max())));
-    }
+  /*!
+  * @breif: set the raw range value in image struct
+  * @param: range in meters
+  * @param: scale thet range is in
+  */
+  void set_range(float range, double scale) noexcept 
+  {
+    r16u = static_cast<uint16_t>(
+        std::min(range * scale,
+                 static_cast<double>(std::numeric_limits<uint16_t>::max())));
+  }
 
-    /*!
-    * @breif: set range and signal to zero approaching inf.
-    */
-    void set_bad() noexcept {
-        x = y = z = std::numeric_limits<float>::quiet_NaN();
-        r16u = s16u = 0;
-    }
+  /*!
+  * @breif: set range and signal to zero approaching inf.
+  */
+  void set_bad() noexcept {
+    x = y = z = std::numeric_limits<float>::quiet_NaN();
+    r16u = s16u = 0;
+  }
 };
 
 static_assert(sizeof(ImageData) == sizeof(float) * 4,
@@ -59,73 +59,72 @@ static_assert(sizeof(ImageData) == sizeof(float) * 4,
 */
 struct LidarModel 
 {
-    LidarModel() = default;
-    /*!
-    * @breif: parse metadata and save important info from it.
-    * @param: string in json format containing ouster metadata.
-    */
-    explicit LidarModel(const std::string& metadata);
+  LidarModel() = default;
+  /*!
+  * @breif: parse metadata and save important info from it.
+  * @param: string in json format containing ouster metadata.
+  */
+  explicit LidarModel(const std::string& metadata);
 
-    /*!
-    * @brief: whether this model is ready
-    */
-    bool Initialized() const { return !altitudes.empty(); }
+  /*!
+  * @brief: whether this model is ready
+  */
+  bool Initialized() const { return !altitudes.empty(); }
 
-    // @breif: number of beams
-    int rows{};               
-    // @breif: number of columns in a full scan
-    int cols{};                     
-    // @breif: frequency
-    int freq{};
-    // @breif: delta time between two columns in secs
-    double dt_col{};
-    // @breif: delta time between two packets in secs 
-    double dt_packet{};             
-    // @breif: delta angle between two columns in radians
-    double d_azimuth{};            
-    // @brief: distance between beam and origin
-    double beam_offset{};
-    // @brief: alitude angles, high to low in radians
-    std::vector<double> altitudes;
-    // @breif: azimuth affset angles in radians
-    std::vector<double> azimuths;
-    // @breif: metadata in sensor info formet
-    ouster_ros::sensor::sensor_info info;
-    // @breif: packet format from ouster 
-    ouster_ros::sensor::packet_format const* pf{nullptr};  
+  // @breif: number of beams
+  int rows{};               
+  // @breif: number of columns in a full scan
+  int cols{};                     
+  // @breif: frequency
+  int freq{};
+  // @breif: delta time between two columns in secs
+  double dt_col{};
+  // @breif: delta time between two packets in secs 
+  double dt_packet{};             
+  // @breif: delta angle between two columns in radians
+  double d_azimuth{};            
+  // @brief: distance between beam and origin
+  double beam_offset{};
+  // @brief: alitude angles, high to low in radians
+  std::vector<double> altitudes;
+  // @breif: azimuth affset angles in radians
+  std::vector<double> azimuths;
+  // @breif: metadata in sensor info formet
+  ouster_ros::sensor::sensor_info info;
+  // @breif: packet format from ouster 
+  ouster_ros::sensor::packet_format const* pf{nullptr};  
 
-    const auto& pixel_shifts() const noexcept 
-    {
-        return info.format.pixel_shift_by_row;
-    }
+  const auto& pixel_shifts() const noexcept 
+  {
+    return info.format.pixel_shift_by_row;
+  }
 
-    /*!
-    * @brief Convert lidar range data to xyz
-    * @details see software manual 3.1.2 Lidar Range to XYZ
-    *
-    * y    r
-    * ^   / -> rotate clockwise
-    * |  /
-    * | /
-    * |/  theta
-    * o ---------> x  (connector)
-    * @param: range of point
-    * @param: calcualted angle of column
-    * @param: id of row
-    */
-    Eigen::Vector3f ToPoint(float range, float theta_enc, int row) const;
+  /*!
+  * @brief Convert lidar range data to xyz
+  * @details see software manual 3.1.2 Lidar Range to XYZ
+  *
+  * y    r
+  * ^   / -> rotate clockwise
+  * |  /
+  * | /
+  * |/  theta
+  * o ---------> x  (connector)
+  * @param: range of point
+  * @param: calcualted angle of column
+  * @param: id of row
+  */
+  Eigen::Vector3f ToPoint(float range, float theta_enc, int row) const;
+  /*!
+  * @brief: calculate unique id for a measurement
+  * @return: calculated uid
+  */
+  int Uid(int fid, int mid) const noexcept { return fid * cols + mid; }
 
-    /*!
-    * @brief: calculate unique id for a measurement
-    * @return: calculated uid
-    */
-    int Uid(int fid, int mid) const noexcept { return fid * cols + mid; }
-
-    /*!
-    * @brief: update camera info with current info
-    * @param: recently recieved camera info ros msg
-    */
-    void UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const;
+  /*!
+  * @brief: update camera info with current info
+  * @param: recently recieved camera info ros msg
+  */
+  void UpdateCameraInfo(sensor_msgs::CameraInfo& cinfo) const;
 };
 
 /*!
