@@ -5,15 +5,26 @@ set(CMAKE_CXX_STANDARD 17)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 
-find_package(catkin REQUIRED COMPONENTS cv_bridge image_transport pcl_ros
-                                        sensor_msgs ouster_ros)
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  sensor_msgs
+  cv_bridge
+  image_transport
+  pcl_ros
+  ouster_ros
+  )
+
 catkin_package()
 
-add_executable(ouster_decoder src/lidar.cpp src/decoder.cpp)
-target_include_directories(ouster_decoder PRIVATE src ${catkin_INCLUDE_DIRS})
-target_link_libraries(ouster_decoder PRIVATE ${catkin_LIBRARIES})
-enable_warnings(ouster_decoder)
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+)
 
-add_executable(ouster_driver src/driver.cpp)
-target_include_directories(ouster_driver PRIVATE ${catkin_INCLUDE_DIRS})
-target_link_libraries(ouster_driver PRIVATE ${catkin_LIBRARIES})
+add_executable(decoder_node src/decoder.cpp src/decoder_node.cpp src/lidar.cpp)
+target_link_libraries(decoder_node PRIVATE ${catkin_LIBRARIES})
+enable_warnings(decoder_node)
+
+add_executable(driver_node src/driver.cpp src/driver_node.cpp)
+target_link_libraries(driver_node PRIVATE ${catkin_LIBRARIES})
+enable_warnings(driver_node)

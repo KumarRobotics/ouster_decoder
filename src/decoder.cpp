@@ -1,116 +1,58 @@
-#include <cv_bridge/cv_bridge.h>
-#include <image_transport/image_transport.h>
-#include <ros/ros.h>
-#include <tf2_ros/static_transform_broadcaster.h>
+/*!
+ * Kumar Robotics
+ * January 2024 Refactor
+ * Logic for handling incoming lidar and imu packets and
+ * passing them appropriate struct to be decoded. Once the buffers are 
+ * ready they are published on the appropriate topics.
+ * Authors: Chao Qu, Jason Hughes
+ */ 
 
-#include "lidar.h"
-#include "ouster_ros/GetMetadata.h"
-#include "ouster_ros/PacketMsg.h"
+#include "ouster_decoder/decoder.h"
 
-namespace ouster_decoder {
-
-namespace os = ouster_ros::sensor;
-namespace sm = sensor_msgs;
-
-constexpr double kDefaultGravity = 9.807;  // [m/s^2] earth gravity
-
-/// @brief Decoder node
-class Decoder {
- public:
-  explicit Decoder(const ros::NodeHandle& pnh);
-
-  // No copy no move
-  Decoder(const Decoder&) = delete;
-  Decoder& operator=(const Decoder&) = delete;
-  Decoder(Decoder&&) = delete;
-  Decoder& operator=(Decoder&&) = delete;
-
-  /// Callbacks
-  void LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg);
-  void ImuPacketCb(const ouster_ros::PacketMsg& imu_msg);
-
- private:
-  /// Initialize ros related stuff (frame, publisher, subscriber)
-  void InitRos();
-  /// Initialize all parameters
-  void InitParams();
-  /// Initialize ouster related stuff
-  void InitOuster();
-  void InitModel(const std::string& metadata);
-  void InitScan(const LidarModel& model);
-  void SendTransform(const LidarModel& model);
-
-  /// Whether we are still waiting for alignment to mid 0
-  [[nodiscard]] bool NeedAlign(int mid);
-
-  /// Publish messages
-  void PublishAndReset();
-
-  /// Record processing time of lidar callback, print warning if it exceeds time
-  /// between two packets
-  void Timing(const ros::Time& start) const;
-
-  // ros
-  ros::NodeHandle pnh_;
-  image_transport::ImageTransport it_;
-  ros::Subscriber lidar_sub_, imu_sub_, meta_sub_;
-  ros::Publisher cloud_pub_, imu_pub_;
-  ros::Publisher range_pub_, signal_pub_;
-  image_transport::CameraPublisher camera_pub_;
-  tf2_ros::StaticTransformBroadcaster static_tf_;
-  std::string sensor_frame_, lidar_frame_, imu_frame_;
-
-  // data
-  LidarScan scan_;
-  LidarModel model_;
-  sm::CameraInfoPtr cinfo_msg_;
-
-  // params
-  double gravity_{};              // gravity
-  bool replay_{false};            // replay mode will reinitialize on jump
-  bool need_align_{true};         // whether to align scan
-  double acc_noise_var_{};        // discrete time acc noise variance
-  double gyr_noise_var_{};        // discrete time gyr noise variance
-  double vis_signal_scale_{1.0};  // scale signal visualization
-};
-
-Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) {
+Decoder::Decoder(const ros::NodeHandle& pnh) : pnh_(pnh), it_(pnh) 
+{
   InitParams();
   InitRos();
   InitOuster();
 }
 
-void Decoder::InitRos() {
+void Decoder::InitRos() 
+{
   // Subscribers, queue size is 1 second
-  lidar_sub_ =
-      pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
+  lidar_sub_ = pnh_.subscribe("lidar_packets", 640, &Decoder::LidarPacketCb, this);
   imu_sub_ = pnh_.subscribe("imu_packets", 100, &Decoder::ImuPacketCb, this);
+  
   ROS_INFO_STREAM("Subscribing lidar packets: " << lidar_sub_.getTopic());
   ROS_INFO_STREAM("Subscribing imu packets: " << imu_sub_.getTopic());
 
   // Publishers
   camera_pub_ = it_.advertiseCamera("image", 10);
-  cloud_pub_ = pnh_.advertise<sm::PointCloud2>("cloud", 10);
-  imu_pub_ = pnh_.advertise<sm::Imu>("imu", 100);
-  range_pub_ = pnh_.advertise<sm::Image>("range", 5);
-  signal_pub_ = pnh_.advertise<sm::Image>("signal", 5);
+  cloud_pub_ = pnh_.advertise<sensor_msgs::PointCloud2>("cloud", 10);
+  imu_pub_ = pnh_.advertise<sensor_msgs::Imu>("imu", 100);
+  range_pub_ = pnh_.advertise<sensor_msgs::Image>("range", 5);
+  signal_pub_ = pnh_.advertise<sensor_msgs::Image>("signal", 5);
 
   // Frames
   sensor_frame_ = pnh_.param<std::string>("sensor_frame", "os_sensor");
   lidar_frame_ = pnh_.param<std::string>("lidar_frame", "os_lidar");
   imu_frame_ = pnh_.param<std::string>("imu_frame", "os_imu");
+  
   ROS_INFO_STREAM("Sensor frame: " << sensor_frame_);
   ROS_INFO_STREAM("Lidar frame: " << lidar_frame_);
   ROS_INFO_STREAM("Imu frame: " << imu_frame_);
 }
 
-void Decoder::InitParams() {
+void Decoder::InitParams() 
+{
   replay_ = pnh_.param<bool>("replay", false);
   ROS_INFO("Replay: %s", replay_ ? "true" : "false");
+  
   gravity_ = pnh_.param<double>("gravity", kDefaultGravity);
   ROS_INFO("Gravity: %f", gravity_);
+  
   scan_.destagger = pnh_.param<bool>("destagger", false);
   ROS_INFO("Destagger: %s", scan_.destagger ? "true" : "false");
+  
   scan_.min_range = pnh_.param<double>("min_range", 0.5);
   scan_.max_range = pnh_.param<double>("max_range", 127.0);
   scan_.range_scale = pnh_.param<double>("range_scale", 512.0);
@@ -125,17 +67,20 @@ void Decoder::InitParams() {
 
   acc_noise_var_ = pnh_.param<double>("acc_noise_std", 0.0023);
   gyr_noise_var_ = pnh_.param<double>("gyr_noise_std", 0.00026);
+  
   // https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model
   acc_noise_var_ = std::pow(acc_noise_var_, 2) * 100.0;
   gyr_noise_var_ = std::pow(gyr_noise_var_, 2) * 100.0;
   ROS_INFO("Discrete time acc noise var: %f, gyr nosie var: %f",
            acc_noise_var_,
            gyr_noise_var_);
+  
   vis_signal_scale_ = pnh_.param<double>("vis_signal_scale", 4.0);
   ROS_INFO("Signal scale: %f", vis_signal_scale_);
 }
 
-void Decoder::InitOuster() {
+void Decoder::InitOuster() 
+{
   ROS_INFO_STREAM("=== Initializing Ouster Decoder ===");
   // wait for service
   auto client = pnh_.serviceClient<ouster_ros::GetMetadata>("get_metadata");
@@ -163,11 +108,13 @@ void Decoder::InitOuster() {
   }
 }
 
-void Decoder::InitModel(const std::string& metadata) {
+// TODO this may need to change depending on the changes of Lidar Model
+void Decoder::InitModel(const std::string& metadata) 
+{
   // parse metadata into lidar model
   model_ = LidarModel{metadata};
   ROS_INFO("Lidar mode %s: %d x %d @ %d hz, delta_azimuth %f",
-           os::to_string(model_.info.mode).c_str(),
+           ouster_ros::sensor::to_string(model_.info.mode).c_str(),
            model_.rows,
            model_.cols,
            model_.freq,
@@ -177,11 +124,12 @@ void Decoder::InitModel(const std::string& metadata) {
            model_.pf->pixels_per_column);
 
   // Generate partial camera info message
-  cinfo_msg_ = boost::make_shared<sm::CameraInfo>();
+  cinfo_msg_ = boost::make_shared<sensor_msgs::CameraInfo>();
   model_.UpdateCameraInfo(*cinfo_msg_);
 }
 
-void Decoder::InitScan(const LidarModel& model) {
+void Decoder::InitScan(const LidarModel& model) 
+{
   int num_subscans = pnh_.param<int>("divide", 1);
   // Make sure cols is divisible by num_subscans
   if (num_subscans < 1 || model.cols % num_subscans != 0) {
@@ -189,7 +137,7 @@ void Decoder::InitScan(const LidarModel& model) {
         "num subscans is not divisible by cols: " + std::to_string(model.cols) +
         " / " + std::to_string(num_subscans));
   }
-
+  
   // Each block has 16 cols, make sure we dont divide into anything smaller
   num_subscans = std::min(num_subscans, model.cols / 16);
 
@@ -198,14 +146,17 @@ void Decoder::InitScan(const LidarModel& model) {
   scan_.Allocate(model.rows, subscan_cols);
 }
 
-void Decoder::SendTransform(const LidarModel& model) {
+
+void Decoder::SendTransform(const LidarModel& model) 
+{
   static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
-      model.info.imu_to_sensor_transform, sensor_frame_, imu_frame_));
+      model.info.imu_to_sensor_transform, sensor_frame_, imu_frame_, ros::Time::now()));
   static_tf_.sendTransform(ouster_ros::transform_to_tf_msg(
-      model.info.lidar_to_sensor_transform, sensor_frame_, lidar_frame_));
+      model.info.lidar_to_sensor_transform, sensor_frame_, lidar_frame_, ros::Time::now()));
 }
 
-void Decoder::PublishAndReset() {
+void Decoder::PublishAndReset() 
+{
   std_msgs::Header header;
   header.frame_id = lidar_frame_;
   header.stamp.fromNSec(scan_.times.back());  // use time of the last column
@@ -260,7 +211,8 @@ void Decoder::PublishAndReset() {
   scan_.SoftReset(model_.cols);
 }
 
-void Decoder::Timing(const ros::Time& t_start) const {
+void Decoder::Timing(const ros::Time& t_start) const 
+{
   const auto t_end = ros::Time::now();
   const auto t_proc = (t_end - t_start).toSec();
   const auto ratio = t_proc / model_.dt_packet;
@@ -271,7 +223,8 @@ void Decoder::Timing(const ros::Time& t_start) const {
       1, "time [ms] %.4f / %.4f (%.1f%%)", t_proc_ms, t_block_ms, ratio * 100);
 }
 
-bool Decoder::NeedAlign(int mid) {
+bool Decoder::NeedAlign(int mid) 
+{
   if (need_align_ && mid == 0) {
     need_align_ = false;
     ROS_WARN("Align start of scan to mid %d, icol in scan %d", mid, scan_.icol);
@@ -279,7 +232,8 @@ bool Decoder::NeedAlign(int mid) {
   return need_align_;
 }
 
-void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
+void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) 
+{
   const auto t0 = ros::Time::now();
   const auto* packet_buf = lidar_msg.buf.data();
   const auto& pf = *model_.pf;
@@ -349,19 +303,22 @@ void Decoder::LidarPacketCb(const ouster_ros::PacketMsg& lidar_msg) {
         // a different dataset
         InitOuster();
       } else {
-        ROS_FATAL("Large jump detected in normal mode, shutting down...");
-        ros::shutdown();
+        ROS_FATAL("Large jump detected in normal mode, restarting...");
+        need_align_ = true;
+        scan_.HardReset();
+        InitOuster();
       }
       return;
     }
   }
 }
 
-void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
+void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) 
+{
   const auto* buf = imu_msg.buf.data();
   const auto& pf = *model_.pf;
 
-  sm::Imu m;
+  sensor_msgs::Imu m;
   m.header.stamp.fromNSec(pf.imu_gyro_ts(buf));
   m.header.frame_id = imu_frame_;
 
@@ -389,13 +346,17 @@ void Decoder::ImuPacketCb(const ouster_ros::PacketMsg& imu_msg) {
   imu_pub_.publish(m);
 }
 
-}  // namespace ouster_decoder
 
-int main(int argc, char** argv) {
-  ros::init(argc, argv, "os_decoder");
 
-  ouster_decoder::Decoder node(ros::NodeHandle("~"));
-  ros::spin();
 
-  return 0;
-}
+
+
+
+
+
+
+
+
+
+
+

@@ -4,6 +4,7 @@
 
     <arg name="lidar_ns" default="os_node"/>
     <arg name="driver_ns" default="/os_node"/>
+    <arg name="replay" default="false"/>
 
     <!-- ouster: https://data.ouster.io/downloads/datasheets/datasheet-revd-v2p1-os1.pdf -->
     <!-- anything < min_range or > max_range will be set to nan -->
@@ -15,8 +16,6 @@
     <arg name="gravity" default="9.80184"/>
     <!-- Divide one scan to n subscans, default is 1, can be 2, 4, 8, ... -->
     <arg name="divide" default="1"/>
-    <!-- Replay mode will reinitilize when detecting forward/backward jumps -->
-    <arg name="replay" default="true"/>
     <!-- Scale signal channel for visualization only -->
     <arg name="vis_signal_scale" default="4.0"/>
 
@@ -42,10 +41,9 @@
     <arg name="lidar_frame" default="os_lidar"/>
     <arg name="imu_frame" default="os_imu"/>
 
-    <node pkg="ouster_decoder" name="os_decoder" type="ouster_decoder" output="screen" ns="$(arg lidar_ns)">
+    <node pkg="ouster_decoder" name="os_decoder" type="decoder_node" output="screen" ns="os_node">
         <!-- params -->
         <param name="divide" type="int" value="$(arg divide)"/>
-        <param name="replay" type="bool" value="$(arg replay)"/>
         <param name="gravity" type="double" value="$(arg gravity)"/>
         <param name="destagger" type="bool" value="$(arg destagger)"/>
 
