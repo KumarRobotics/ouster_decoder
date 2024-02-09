@@ -9,11 +9,11 @@
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "os_decoder_node");
+  ros::init(argc, argv, "os_decoder_node");
 
-    Decoder node(ros::NodeHandle("~"));
-    ros::spin();
+  Decoder node(ros::NodeHandle("~"));
+  ros::spin();
 
-    return 0;
+  return 0;
 }
 

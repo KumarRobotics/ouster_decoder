@@ -1,6 +1,6 @@
 # ouster_decoder
 
-This decoder is intended as an alternative the [ouster-ros](https://github.com/ouster-lidar/ouster-ros) decoder. It publishes things like LidarScans in a different formats which may be better for things like Lidar Odometry, while things like point clouds, signal, range and IMU remain in the same format. It also has very low latency (<0.2ms) compared to ouster_example (>3ms), tested on Intel i7 11th gen cpu. This will also notify you when packets are dropped. The decoder is up to date with the v0.10 of the ouster SDK.
+This decoder is intended as an alternative the [ouster-ros](https://github.com/ouster-lidar/ouster-ros) decoder. It publishes things like LidarScans in a different formats which may be better for things like Lidar Odometry, while things like point clouds, signal, range and IMU remain in the same format. It also has very low latency (<0.2ms) compared to ouster_ros (>1.5ms), tested on Intel i9 13th gen cpu. This will also notify you when packets are dropped. The decoder is up to date with the v0.10 of the ouster SDK.
 
 The decoder only supports LEGACY and single return profile. Currently there's no plan for dual return profile.
 
@@ -15,8 +15,8 @@ Clone this repo in you catkin workspace along with [ouster-ros](https://github.c
 ## Parameters
 The following parameters may differ from the defaults that we use. They can be set in the launch file or passed as an argument.
 - `replay` set to `true` if you are using a bag, default: `false`.
-- `sensor_hostname` hostname or IP in dotted decimal format of the ouster, default: `192.168.100.12`
-- `udp_dest` hostname or IP in dotted decimal format of where the sensor will send data. Most likely the computer the ouster is connected to, default: `192.168.100.1`
+- `sensor_hostname` hostname or IP in dotted decimal format of the ouster.
+- `udp_dest` hostname or IP in dotted decimal format of where the sensor will send data. Most likely the computer the ouster is connected to.
 - `lidar_port` the port to which the ouster will send lidar packets, default: `7502`
 - `imu_port` the port to which the ouster will send imu packets, default: `7503`
 - `lidar_mode` resolution and rate of the lidar: either `512x10`, `512x20`, `1024x10`, `1024x20`, or `2048x10`, defualt comes from lidar.
@@ -26,9 +26,9 @@ The following parameters may differ from the defaults that we use. They can be s
 - `driver_ns` namespace for driver node.
 
 ## Usage
-To start everything at once use:
+To start everything at once on hardware:
 ```
-roslaunch ouster_decoder driver.launch
+roslaunch ouster_decoder ouster.launch sensor_hostname:=<sensor-ip> udp_dest:=<destination-ip>
 ```
 
 Run just the driver (if you want to bag the packets for later decoding) 
@@ -40,7 +40,7 @@ To run with a bag file run:
 ```
 roslaunch ouster_decoder ouster.launch replay:=true
 ```
-and start your bag in another terminal. If your bag does not have the `/metadata` topic you'll need to specify a json file with `metadata:=/path/to/json`.
+and start your bag in another terminal. If your bag does not have the `/metadata` topic you'll need to specify a json file with `metadata:=/path/to/json` at launch.
 
 The driver node is the same (logically) as the one from `ouster_example`, but cleaned up and it publishes a string message to topic `/os_node/metadata` that you should also record. When in replay mode, there's no need to specify a metadata file. The metadata file will still be saved in case one forgot to record the metadata message.
 
@@ -64,7 +64,7 @@ The corresponding point cloud has point type XYZI.
 
 During each callback, we process the incoming packet and immediately decode and convert to 3d points. When we reach the end of a sweep, the data is directly published without any extra computations.
 
-Therefore, the publish latency of our decoder is typically less than 0.2ms, while the ouster `os_cloud_node` takes more than 3ms to publish a point cloud.
+Therefore, the publish latency of our decoder is typically less than 0.2ms, while the ouster `os_cloud_node` takes more than 1.5ms to publish a point cloud.
 
 ## Data Drops
 

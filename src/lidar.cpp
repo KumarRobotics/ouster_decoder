@@ -1,7 +1,7 @@
 /*!
  * Kumar Robotics
  * January 2024 refactor
- * @breif logic ofr handling lidar metadata, image formatting and 
+ * @breif logic for handling lidar metadata, image formatting and 
  * incoming lidar buffers from the packets
  * Author: Chao Qu
  */

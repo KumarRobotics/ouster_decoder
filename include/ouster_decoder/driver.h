@@ -37,12 +37,12 @@ class Driver
          * @brief: get and set all ROS params
          * as private class varaibles.
         */
-        void initParams();
+        void InitParams();
         /*!
         * @brief: initialize lidar packet publisher, imu packet publisher
         * and metadata string publisher.
         */
-        void initRos();
+        void InitRos();
 
         /*!
         * @brief: write the metadata string from the ouster to a 
@@ -50,26 +50,26 @@ class Driver
         * @param: String metadata: a string in json format to be written.
         * @return: bool: true if write was successful, false if it was not.
         */
-        bool writeMetadata(const std::string& metadata);
+        bool WriteMetadata(const std::string& metadata);
         /*!
         * @brief: callback for the metadata subscription, used for
         * bags containing metadata on a topic rather than in json format.
         * Once metadata is recived pass it to the decoder with the advertiseService.
         * @param: std_msgs::String msg: ros String message containing the metadata.
         */
-        void metadataCallback(const std_msgs::String msg);
+        void MetadataCallback(const std_msgs::String msg);
         /*!
         * @brief: get the lidar and imu packets from the ouster via the
         * ouster client and publish them on their respective topics.
         * @param: sensor_info info: sensor_info struct containing all the metadata.
         */
-        int connectionLoop(const ouster::sensor::sensor_info info);
+        int ConnectionLoop(const ouster::sensor::sensor_info info);
         /*!
         * @brief: convert the metadata to a string and advertise 
         * the metadata on a service for the decoder.
         * @param: sensor_info info: sensor_info struct containing the metadata.
         */
-        void advertiseService(const ouster::sensor::sensor_info info);
+        void AdvertiseService(const ouster::sensor::sensor_info info);
 
         // ROS Params
         // @brief: hostname of the ouster, usually the ip address
