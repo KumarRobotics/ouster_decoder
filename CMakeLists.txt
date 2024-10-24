@@ -21,6 +21,10 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+add_library(driver_nodelet
+  src/shared_driver.cpp
+)
+
 add_executable(decoder_node src/decoder.cpp src/decoder_node.cpp src/lidar.cpp)
 target_link_libraries(decoder_node PRIVATE ${catkin_LIBRARIES})
 enable_warnings(decoder_node)
@@ -28,3 +32,7 @@ enable_warnings(decoder_node)
 add_executable(driver_node src/driver.cpp src/driver_node.cpp)
 target_link_libraries(driver_node PRIVATE ${catkin_LIBRARIES})
 enable_warnings(driver_node)
+
+install(FILES nodelet_plugins.xml
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)

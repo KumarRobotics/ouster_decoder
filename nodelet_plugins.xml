@@ -1,0 +1,7 @@
+<library path="lib/libdriver_nodelet">
+  <class name="OusterDriver/Driver" type="OusterDriver::Driver" base_class_type="nodelet::Nodelet">
+  <description>
+    Nodelet for ouster decoder driver.
+  </description>
+  </class>
+</library>
